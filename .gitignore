@@ -1,0 +1,7 @@
+/.idea/
+**/target/
+**/node_modules/
+**/dist/
+*.log
+/data/output/**/*.json
+

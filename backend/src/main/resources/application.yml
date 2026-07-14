@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: mini-billing-backend
+
+billing:
+  input-directory: ../data/input
+  output-directory: ../data/output
+
