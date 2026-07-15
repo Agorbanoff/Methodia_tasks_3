@@ -1,6 +1,6 @@
 package com.methodia.minibilling.service;
 
-import com.methodia.minibilling.dto.InvoiceDownload;
+import com.methodia.minibilling.controller.dto.InvoiceDownload;
 import com.methodia.minibilling.exception.InvoiceNotFoundException;
 import com.methodia.minibilling.model.Invoice;
 import com.methodia.minibilling.repository.InvoiceFileRepository;

@@ -1,4 +1,4 @@
-package com.methodia.minibilling.dto;
+package com.methodia.minibilling.controller.dto;
 
 public record HealthResponse(
         String status,

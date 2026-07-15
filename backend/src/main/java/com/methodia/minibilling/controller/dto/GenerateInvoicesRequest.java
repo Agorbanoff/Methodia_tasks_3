@@ -1,4 +1,4 @@
-package com.methodia.minibilling.dto;
+package com.methodia.minibilling.controller.dto;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;

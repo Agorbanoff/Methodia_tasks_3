@@ -1,6 +1,6 @@
 package com.methodia.minibilling.service;
 
-import com.methodia.minibilling.dto.HealthResponse;
+import com.methodia.minibilling.controller.dto.HealthResponse;
 import com.methodia.minibilling.model.Consumer;
 import com.methodia.minibilling.model.Invoice;
 import com.methodia.minibilling.model.InvoiceLine;

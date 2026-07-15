@@ -1,6 +1,6 @@
 package com.methodia.minibilling.controller;
 
-import com.methodia.minibilling.dto.InvoiceDownload;
+import com.methodia.minibilling.controller.dto.InvoiceDownload;
 import com.methodia.minibilling.exception.GlobalExceptionHandler;
 import com.methodia.minibilling.exception.InvoiceNotFoundException;
 import com.methodia.minibilling.model.Invoice;

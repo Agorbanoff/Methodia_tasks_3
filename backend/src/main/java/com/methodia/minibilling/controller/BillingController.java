@@ -1,6 +1,6 @@
 package com.methodia.minibilling.controller;
 
-import com.methodia.minibilling.dto.HealthResponse;
+import com.methodia.minibilling.controller.dto.HealthResponse;
 import com.methodia.minibilling.service.BillingService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

@@ -1,4 +1,4 @@
-package com.methodia.minibilling.dto;
+package com.methodia.minibilling.controller.dto;
 
 import com.methodia.minibilling.model.Invoice;
 import com.methodia.minibilling.model.InvoiceLine;

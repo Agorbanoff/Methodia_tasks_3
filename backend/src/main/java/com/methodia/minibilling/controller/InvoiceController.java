@@ -1,12 +1,11 @@
 package com.methodia.minibilling.controller;
 
-import com.methodia.minibilling.dto.GenerateInvoicesRequest;
-import com.methodia.minibilling.dto.GenerateInvoicesResponse;
-import com.methodia.minibilling.dto.InvoiceDetailResponse;
-import com.methodia.minibilling.dto.InvoiceDownload;
-import com.methodia.minibilling.dto.InvoiceMapper;
-import com.methodia.minibilling.dto.InvoiceSummaryResponse;
-import com.methodia.minibilling.model.Invoice;
+import com.methodia.minibilling.controller.dto.GenerateInvoicesRequest;
+import com.methodia.minibilling.controller.dto.GenerateInvoicesResponse;
+import com.methodia.minibilling.controller.dto.InvoiceDetailResponse;
+import com.methodia.minibilling.controller.dto.InvoiceDownload;
+import com.methodia.minibilling.controller.dto.InvoiceMapper;
+import com.methodia.minibilling.controller.dto.InvoiceSummaryResponse;
 import com.methodia.minibilling.service.BillingService;
 import com.methodia.minibilling.service.InvoiceGenerationResult;
 import com.methodia.minibilling.service.InvoiceQueryService;
@@ -51,7 +50,8 @@ public class InvoiceController {
         List<InvoiceSummaryResponse> invoices = result.invoices().stream()
                 .map(InvoiceMapper::toSummary)
                 .toList();
-        return ResponseEntity.status(HttpStatus.CREATED)
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
                 .body(new GenerateInvoicesResponse(request.year(), request.month(), result.generatedCount(), invoices));
     }
 
@@ -77,7 +77,8 @@ public class InvoiceController {
                 .filename(download.fileName(), StandardCharsets.UTF_8)
                 .build();
 
-        return ResponseEntity.ok()
+        return ResponseEntity
+                .ok()
                 .contentType(new MediaType(MediaType.APPLICATION_JSON, StandardCharsets.UTF_8))
                 .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
                 .body(new FileSystemResource(download.path()));
