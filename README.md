@@ -1,29 +1,74 @@
 # Mini Billing
 
-Full-stack project for generating JSON invoices from CSV input files.
+Full-stack project for importing CSV billing data into PostgreSQL and generating invoices.
 
 ## Structure
 
 - `backend/` - Java 21 Spring Boot backend.
 - `frontend/` - React application built with Vite.
-- `data/input/` - CSV input files.
+- `data/input/` - source CSV input files.
 - `data/output/` - generated JSON invoice files.
+- `docker-compose.yml` - local PostgreSQL database.
+
+## Local Run Flow
+
+Start PostgreSQL first:
+
+```bash
+docker compose up -d
+```
+
+Start the backend on `http://localhost:6969`:
+
+```bash
+cd backend
+mvn spring-boot:run
+```
+
+Start the frontend:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Before generating invoices, import the CSV files into PostgreSQL:
+
+```bash
+curl -X POST http://localhost:6969/api/import
+```
+
+You can also use the `Import CSV files` button in the frontend.
+
+After the import succeeds, generate invoices:
+
+```bash
+curl -X POST http://localhost:6969/api/invoices/generate \
+  -H "Content-Type: application/json" \
+  -d "{\"year\":2024,\"month\":3}"
+```
+
+You can also use the `Generate invoices` button in the frontend.
+
+Generate requires imported PostgreSQL data. If the CSV files have not been imported yet, the backend returns:
+
+```text
+No imported data found. Please import CSV files first.
+```
+
+The frontend shows that message in the Generate card.
 
 ## Backend
 
 Configuration is in `backend/src/main/resources/application.yml`:
 
 ```yaml
+server:
+  port: 6969
+
 billing:
   input-directory: ../data/input
   output-directory: ../data/output
-```
-
-Run the backend:
-
-```bash
-cd backend
-mvn spring-boot:run
 ```
 
 Run backend tests:
@@ -36,19 +81,12 @@ mvn test
 Main endpoints:
 
 ```text
-GET http://localhost:8080/api/billing/health
-POST http://localhost:8080/api/invoices/generate
-GET http://localhost:8080/api/invoices
-GET http://localhost:8080/api/invoices/{documentNumber}
-GET http://localhost:8080/api/invoices/{documentNumber}/download
-```
-
-Generate invoices example:
-
-```bash
-curl -X POST http://localhost:8080/api/invoices/generate \
-  -H "Content-Type: application/json" \
-  -d "{\"year\":2024,\"month\":3}"
+GET http://localhost:6969/api/billing/health
+POST http://localhost:6969/api/import
+POST http://localhost:6969/api/invoices/generate
+GET http://localhost:6969/api/invoices
+GET http://localhost:6969/api/invoices/{documentNumber}
+GET http://localhost:6969/api/invoices/{documentNumber}/download
 ```
 
 ## Frontend
@@ -69,13 +107,7 @@ cp .env.example .env
 Default frontend API base URL:
 
 ```text
-VITE_API_BASE_URL=http://localhost:8080
-```
-
-Run the development server:
-
-```bash
-npm run dev
+VITE_API_BASE_URL=http://localhost:6969
 ```
 
 Build the frontend:
@@ -83,7 +115,3 @@ Build the frontend:
 ```bash
 npm run build
 ```
-
-## Notes
-
-The project intentionally does not include database configuration. CSV files are the input source, and JSON files under `data/output/` are the invoice repository.

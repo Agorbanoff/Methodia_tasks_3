@@ -6,7 +6,7 @@ public record GenerateInvoicesResponse(
         int year,
         int month,
         int generatedCount,
+        int skippedExistingCount,
         List<InvoiceSummaryResponse> invoices
 ) {
 }
-

@@ -1,6 +1,5 @@
 package com.methodia.minibilling.service;
 
-import com.methodia.minibilling.exception.AmbiguousPriceException;
 import com.methodia.minibilling.exception.MissingPriceException;
 import com.methodia.minibilling.model.Consumer;
 import com.methodia.minibilling.model.Price;
@@ -27,10 +26,6 @@ public class PricingService {
         if (matches.isEmpty()) {
             throw new MissingPriceException(consumer, product, consumer.priceListNumber());
         }
-        if (matches.size() > 1) {
-            throw new AmbiguousPriceException(consumer, product, consumer.priceListNumber(), matches.size());
-        }
         return matches.getFirst();
     }
 }
-

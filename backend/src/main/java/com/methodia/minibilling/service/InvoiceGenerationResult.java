@@ -6,7 +6,11 @@ import java.util.List;
 
 public record InvoiceGenerationResult(
         List<Invoice> invoices,
-        int generatedCount
+        int generatedCount,
+        int skippedExistingCount
 ) {
-}
 
+    public InvoiceGenerationResult(List<Invoice> invoices, int generatedCount) {
+        this(invoices, generatedCount, 0);
+    }
+}

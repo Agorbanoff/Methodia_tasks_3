@@ -3,8 +3,8 @@ package com.methodia.minibilling.controller;
 import com.methodia.minibilling.controller.dto.GenerateInvoicesRequest;
 import com.methodia.minibilling.controller.dto.GenerateInvoicesResponse;
 import com.methodia.minibilling.controller.dto.InvoiceDetailResponse;
-import com.methodia.minibilling.controller.dto.InvoiceDownload;
-import com.methodia.minibilling.controller.dto.InvoiceMapper;
+import com.methodia.minibilling.export.InvoiceDownload;
+import com.methodia.minibilling.mapper.InvoiceMapper;
 import com.methodia.minibilling.controller.dto.InvoiceSummaryResponse;
 import com.methodia.minibilling.service.BillingService;
 import com.methodia.minibilling.service.InvoiceGenerationResult;
@@ -12,7 +12,7 @@ import com.methodia.minibilling.service.InvoiceQueryService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -52,12 +52,18 @@ public class InvoiceController {
                 .toList();
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .body(new GenerateInvoicesResponse(request.year(), request.month(), result.generatedCount(), invoices));
+                .body(new GenerateInvoicesResponse(
+                        request.year(),
+                        request.month(),
+                        result.generatedCount(),
+                        result.skippedExistingCount(),
+                        invoices
+                ));
     }
 
     @GetMapping
     public List<InvoiceSummaryResponse> findAll(
-            @RequestParam Optional<@Min(1900) Integer> year,
+            @RequestParam Optional<@Min(1900) @Max(2100) Integer> year,
             @RequestParam Optional<@Min(1) @Max(12) Integer> month
     ) {
         return invoiceQueryService.findAll(year, month).stream()
@@ -66,12 +72,14 @@ public class InvoiceController {
     }
 
     @GetMapping("/{documentNumber}")
-    public InvoiceDetailResponse findByDocumentNumber(@PathVariable String documentNumber) {
-        return InvoiceMapper.toDetail(invoiceQueryService.findByDocumentNumber(documentNumber));
+    public ResponseEntity<InvoiceDetailResponse> findByDocumentNumber(@PathVariable String documentNumber) {
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(InvoiceMapper.toDetail(invoiceQueryService.findByDocumentNumber(documentNumber)));
     }
 
     @GetMapping("/{documentNumber}/download")
-    public ResponseEntity<FileSystemResource> download(@PathVariable String documentNumber) {
+    public ResponseEntity<ByteArrayResource> download(@PathVariable String documentNumber) {
         InvoiceDownload download = invoiceQueryService.download(documentNumber);
         ContentDisposition contentDisposition = ContentDisposition.attachment()
                 .filename(download.fileName(), StandardCharsets.UTF_8)
@@ -81,6 +89,6 @@ public class InvoiceController {
                 .ok()
                 .contentType(new MediaType(MediaType.APPLICATION_JSON, StandardCharsets.UTF_8))
                 .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
-                .body(new FileSystemResource(download.path()));
+                .body(new ByteArrayResource(download.content()));
     }
 }

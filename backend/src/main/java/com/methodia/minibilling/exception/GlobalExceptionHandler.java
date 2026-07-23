@@ -14,7 +14,26 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     public ProblemDetail handleIllegalState(IllegalStateException exception) {
         ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
-        problemDetail.setTitle("Billing configuration error");
+        problemDetail.setTitle("Unexpected server error");
+        problemDetail.setDetail(exception.getMessage());
+        return problemDetail;
+    }
+
+    @ExceptionHandler(NoImportedDataException.class)
+    public ProblemDetail handleNoImportedData(NoImportedDataException exception) {
+        ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        problemDetail.setTitle("Import required");
+        problemDetail.setDetail(exception.getMessage());
+        return problemDetail;
+    }
+
+    @ExceptionHandler({
+            MissingOverlappingPriceException.class,
+            IncompletePriceCoverageException.class
+    })
+    public ProblemDetail handleBillingDataError(RuntimeException exception) {
+        ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        problemDetail.setTitle("Invalid billing data");
         problemDetail.setDetail(exception.getMessage());
         return problemDetail;
     }

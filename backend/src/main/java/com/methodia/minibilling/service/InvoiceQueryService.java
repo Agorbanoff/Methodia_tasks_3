@@ -1,10 +1,15 @@
 package com.methodia.minibilling.service;
 
-import com.methodia.minibilling.controller.dto.InvoiceDownload;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.methodia.minibilling.export.InvoiceDownload;
 import com.methodia.minibilling.exception.InvoiceNotFoundException;
+import com.methodia.minibilling.mapper.InvoiceEntityMapper;
 import com.methodia.minibilling.model.Invoice;
-import com.methodia.minibilling.repository.InvoiceFileRepository;
+import com.methodia.minibilling.persistence.entity.InvoiceEntity;
+import com.methodia.minibilling.repository.InvoiceRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.YearMonth;
 import java.util.List;
@@ -13,28 +18,52 @@ import java.util.Optional;
 @Service
 public class InvoiceQueryService {
 
-    private final InvoiceFileRepository invoiceFileRepository;
-    private final InvoiceStorageService invoiceStorageService;
+    private final InvoiceRepository invoiceRepository;
+    private final InvoiceEntityMapper invoiceEntityMapper;
+    private final ObjectMapper objectMapper;
 
-    public InvoiceQueryService(InvoiceFileRepository invoiceFileRepository, InvoiceStorageService invoiceStorageService) {
-        this.invoiceFileRepository = invoiceFileRepository;
-        this.invoiceStorageService = invoiceStorageService;
+    public InvoiceQueryService(
+            InvoiceRepository invoiceRepository,
+            InvoiceEntityMapper invoiceEntityMapper,
+            ObjectMapper objectMapper
+    ) {
+        this.invoiceRepository = invoiceRepository;
+        this.invoiceEntityMapper = invoiceEntityMapper;
+        this.objectMapper = objectMapper;
     }
 
+    @Transactional(readOnly = true)
     public List<Invoice> findAll(Optional<Integer> year, Optional<Integer> month) {
         Optional<YearMonth> invoiceMonth = toYearMonth(year, month);
-        return invoiceStorageService.findAll(invoiceFileRepository.outputDirectory(), invoiceMonth);
+        List<InvoiceEntity> invoices = invoiceMonth
+                .map(monthValue -> invoiceRepository.findByBillingYearAndBillingMonthOrderByNumberAsc(
+                        monthValue.getYear(),
+                        monthValue.getMonthValue()
+                ))
+                .orElseGet(invoiceRepository::findAllByOrderByNumberAsc);
+        return invoices.stream()
+                .map(invoiceEntityMapper::toModel)
+                .toList();
     }
 
+    @Transactional(readOnly = true)
     public Invoice findByDocumentNumber(String documentNumber) {
-        return invoiceStorageService.findByDocumentNumber(invoiceFileRepository.outputDirectory(), documentNumber)
+        return invoiceRepository.findByNumber(documentNumber)
+                .map(invoiceEntityMapper::toModel)
                 .orElseThrow(() -> new InvoiceNotFoundException(documentNumber));
     }
 
+    @Transactional(readOnly = true)
     public InvoiceDownload download(String documentNumber) {
-        return invoiceStorageService.findInvoiceFile(invoiceFileRepository.outputDirectory(), documentNumber)
-                .map(path -> new InvoiceDownload(path.getFileName().toString(), path))
+        InvoiceEntity invoiceEntity = invoiceRepository.findByNumber(documentNumber)
                 .orElseThrow(() -> new InvoiceNotFoundException(documentNumber));
+        Invoice invoice = invoiceEntityMapper.toModel(invoiceEntity);
+        String fileName = invoice.documentNumber() + ".json";
+        try {
+            return new InvoiceDownload(fileName, objectMapper.writeValueAsBytes(invoice));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Could not serialize invoice %s".formatted(documentNumber), exception);
+        }
     }
 
     private Optional<YearMonth> toYearMonth(Optional<Integer> year, Optional<Integer> month) {
@@ -47,4 +76,3 @@ public class InvoiceQueryService {
         return Optional.of(YearMonth.of(year.get(), month.get()));
     }
 }
-

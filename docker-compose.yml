@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: mini-billing-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: mini_billing
+      POSTGRES_USER: mini_billing_user
+      POSTGRES_PASSWORD: mini_billing_password
+    volumes:
+      - mini-billing-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  mini-billing-postgres-data:
