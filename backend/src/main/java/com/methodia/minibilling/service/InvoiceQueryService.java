@@ -1,13 +1,18 @@
 package com.methodia.minibilling.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.methodia.minibilling.export.InvoiceDownload;
+import com.methodia.minibilling.controller.dto.invoice.InvoiceDetailResponse;
 import com.methodia.minibilling.exception.InvoiceNotFoundException;
 import com.methodia.minibilling.mapper.InvoiceEntityMapper;
+import com.methodia.minibilling.mapper.InvoiceMapper;
 import com.methodia.minibilling.model.Invoice;
+import com.methodia.minibilling.persistence.entity.CustomerEntity;
 import com.methodia.minibilling.persistence.entity.InvoiceEntity;
+import com.methodia.minibilling.persistence.entity.UserEntity;
+import com.methodia.minibilling.repository.CustomerRepository;
 import com.methodia.minibilling.repository.InvoiceRepository;
+import com.methodia.minibilling.repository.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,17 +24,33 @@ import java.util.Optional;
 public class InvoiceQueryService {
 
     private final InvoiceRepository invoiceRepository;
+    private final UserRepository userRepository;
+    private final CustomerRepository customerRepository;
     private final InvoiceEntityMapper invoiceEntityMapper;
-    private final ObjectMapper objectMapper;
 
     public InvoiceQueryService(
             InvoiceRepository invoiceRepository,
-            InvoiceEntityMapper invoiceEntityMapper,
-            ObjectMapper objectMapper
+            UserRepository userRepository,
+            CustomerRepository customerRepository,
+            InvoiceEntityMapper invoiceEntityMapper
     ) {
         this.invoiceRepository = invoiceRepository;
+        this.userRepository = userRepository;
+        this.customerRepository = customerRepository;
         this.invoiceEntityMapper = invoiceEntityMapper;
-        this.objectMapper = objectMapper;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<InvoiceDetailResponse> findVisibleInvoices(Optional<String> requestedReference, Pageable pageable,
+                                                           String username) {
+        UserEntity account = findAccount(username);
+        Page<InvoiceEntity> invoices;
+        if (isAdmin(account)) {
+            invoices = findForAdmin(requestedReference, pageable);
+        } else {
+            invoices = invoiceRepository.findByCustomer(linkedCustomer(account), pageable);
+        }
+        return invoices.map(invoiceEntityMapper::toModel).map(InvoiceMapper::toDetail);
     }
 
     @Transactional(readOnly = true)
@@ -54,16 +75,40 @@ public class InvoiceQueryService {
     }
 
     @Transactional(readOnly = true)
-    public InvoiceDownload download(String documentNumber) {
-        InvoiceEntity invoiceEntity = invoiceRepository.findByNumber(documentNumber)
+    public InvoiceDetailResponse findVisibleByDocumentNumber(String documentNumber, String username) {
+        UserEntity account = findAccount(username);
+        InvoiceEntity invoice = invoiceRepository.findByNumber(documentNumber)
                 .orElseThrow(() -> new InvoiceNotFoundException(documentNumber));
-        Invoice invoice = invoiceEntityMapper.toModel(invoiceEntity);
-        String fileName = invoice.documentNumber() + ".json";
-        try {
-            return new InvoiceDownload(fileName, objectMapper.writeValueAsBytes(invoice));
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Could not serialize invoice %s".formatted(documentNumber), exception);
+        if (!isAdmin(account) && !invoice.getCustomer().equals(linkedCustomer(account))) {
+            throw new InvoiceNotFoundException(documentNumber);
         }
+        return InvoiceMapper.toDetail(invoiceEntityMapper.toModel(invoice));
+    }
+
+    private Page<InvoiceEntity> findForAdmin(Optional<String> requestedReference, Pageable pageable) {
+        if (requestedReference.isEmpty()) {
+            return invoiceRepository.findAllByOrderByNumberAsc(pageable);
+        }
+        return customerRepository.findByReference(requestedReference.get())
+                .map(customer -> invoiceRepository.findByCustomer(customer, pageable))
+                .orElseGet(() -> Page.empty(pageable));
+    }
+
+    private UserEntity findAccount(String username) {
+        UserEntity account = userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Authenticated account not found"));
+        return account;
+    }
+
+    private boolean isAdmin(UserEntity account) {
+        return "ADMIN".equals(account.getRole());
+    }
+
+    private CustomerEntity linkedCustomer(UserEntity account) {
+        if (account.getCustomer() == null) {
+            throw new IllegalArgumentException("Authenticated USER account is not linked to a customer");
+        }
+        return account.getCustomer();
     }
 
     private Optional<YearMonth> toYearMonth(Optional<Integer> year, Optional<Integer> month) {

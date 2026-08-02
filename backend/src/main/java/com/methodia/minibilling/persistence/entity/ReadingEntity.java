@@ -1,6 +1,7 @@
 package com.methodia.minibilling.persistence.entity;
 
 import com.methodia.minibilling.model.Product;
+import com.methodia.minibilling.model.ReadingSource;
 import com.methodia.minibilling.persistence.IdGenerator;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -34,8 +35,8 @@ public class ReadingEntity {
     private String id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
-    private UserEntity user;
+    @JoinColumn(name = "customer_id", nullable = false)
+    private CustomerEntity customer;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "product", length = 20, nullable = false)
@@ -53,21 +54,21 @@ public class ReadingEntity {
     @Column(name = "self_reported", nullable = false)
     private boolean selfReported;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source", length = 30, nullable = false)
+    private ReadingSource source = ReadingSource.IMPORTED;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "file_import_id")
     private FileImportEntity fileImport;
-
-    public ReadingEntity(UserEntity user, Product product, OffsetDateTime dateTime, BigDecimal lastReading) {
-        this.user = user;
-        this.product = product;
-        this.dateTime = dateTime;
-        this.lastReading = lastReading;
-    }
 
     @PrePersist
     void prePersist() {
         if (id == null) {
             id = IdGenerator.generateId();
+        }
+        if (source == null) {
+            source = selfReported ? ReadingSource.SELF_REPORTED : ReadingSource.IMPORTED;
         }
     }
 }

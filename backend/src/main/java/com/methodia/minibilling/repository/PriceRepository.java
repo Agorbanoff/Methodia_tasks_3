@@ -13,5 +13,9 @@ public interface PriceRepository extends JpaRepository<PriceEntity, String> {
 
     List<PriceEntity> findByPriceListAndProductOrderByStartDateAsc(int priceList, Product product);
 
+    List<PriceEntity> findByTariffCodeAndProductOrderByStartDateAsc(String tariffCode, Product product);
+
     boolean existsByPriceListAndProductAndStartDateAndEndDate(int priceList, Product product, LocalDate startDate, LocalDate endDate);
+
+    boolean existsByTariffCodeAndProductAndStartDateAndEndDate(String tariffCode, Product product, LocalDate startDate, LocalDate endDate);
 }

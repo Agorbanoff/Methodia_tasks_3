@@ -137,6 +137,6 @@ class ProportionalDistributionServiceTest {
     }
 
     private PriceEntity price(String startDate, String endDate, String value) {
-        return new PriceEntity(Product.GAS, LocalDate.parse(startDate), LocalDate.parse(endDate), new BigDecimal(value), 1);
+        return new PriceEntity(null, Product.GAS, LocalDate.parse(startDate), LocalDate.parse(endDate), new BigDecimal(value), 1, null);
     }
 }

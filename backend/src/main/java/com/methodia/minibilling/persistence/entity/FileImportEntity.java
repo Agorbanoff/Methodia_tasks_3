@@ -49,7 +49,18 @@ public class FileImportEntity {
     @Column(name = "file_content", columnDefinition = "bytea")
     private byte[] fileContent;
 
-    public FileImportEntity(ImportType type, String filename, UserEntity uploadedBy, OffsetDateTime uploadedAt, byte[] fileContent) {
+    @Column(name = "status", length = 30)
+    private String status;
+
+    @Column(name = "imported_records")
+    private Integer importedRecords;
+
+    @Column(name = "error_count")
+    private Integer errorCount;
+
+    public FileImportEntity(String id, ImportType type, String filename, UserEntity uploadedBy,
+                            OffsetDateTime uploadedAt, byte[] fileContent) {
+        this.id = id;
         this.type = type;
         this.filename = filename;
         this.uploadedBy = uploadedBy;

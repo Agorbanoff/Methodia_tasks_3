@@ -7,10 +7,15 @@ import java.util.List;
 public record InvoiceGenerationResult(
         List<Invoice> invoices,
         int generatedCount,
-        int skippedExistingCount
+        int skippedExistingCount,
+        List<String> warnings
 ) {
 
     public InvoiceGenerationResult(List<Invoice> invoices, int generatedCount) {
-        this(invoices, generatedCount, 0);
+        this(invoices, generatedCount, 0, List.of());
+    }
+
+    public InvoiceGenerationResult(List<Invoice> invoices, int generatedCount, int skippedExistingCount) {
+        this(invoices, generatedCount, skippedExistingCount, List.of());
     }
 }

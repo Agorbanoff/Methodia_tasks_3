@@ -53,17 +53,6 @@ public class InvoiceLineEntity {
     @Column(name = "amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
-    public InvoiceLineEntity(int lineId, BigDecimal quantity, OffsetDateTime startDateTime, OffsetDateTime endDateTime, Product product, BigDecimal price, int priceList, BigDecimal amount) {
-        this.lineId = lineId;
-        this.quantity = quantity;
-        this.startDateTime = startDateTime;
-        this.endDateTime = endDateTime;
-        this.product = product;
-        this.price = price;
-        this.priceList = priceList;
-        this.amount = amount;
-    }
-
     @PrePersist
     void prePersist() {
         if (id == null) {

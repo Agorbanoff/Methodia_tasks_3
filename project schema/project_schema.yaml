@@ -1,0 +1,266 @@
+project:
+  name: MiniBilling
+  description: >
+    Mini billing application with a Spring Boot backend and React/Vite frontend. The backend accepts
+    multipart CSV/XLSX customer, usage, and tariff imports, calculates invoices with proportional measurement
+    distribution across price periods, persists billing data in PostgreSQL through JPA, records
+    Billing Run and error-log data, writes audit logs to a backend JSON-lines file, and protects APIs with JWT cookie authentication.
+  root: /Users/alexander/IdeaProjects/MiniBilling
+
+schema_artifacts:
+  directory: project schema/
+  files:
+    - contracts.yaml
+    - project_schema.yaml
+    - mini_billing_backend_schema.yaml
+    - mini_billing_frontend_schema.yaml
+  obsolete_root_schema_removed: true
+
+modules:
+  - name: mini_billing_backend
+    type: backend_service
+    deployable_boundary: Spring Boot application
+    schema: mini_billing_backend_schema.yaml
+    responsibility: Expose secured REST APIs, execute billing workflows, persist data, and integrate with PostgreSQL.
+    technology_stack: Java 21
+    frameworks:
+      - Spring Boot 3.3.7
+      - Spring Web
+      - Spring Data JPA
+      - Hibernate
+      - Spring Security
+      - Jakarta Validation
+      - Spring Scheduling
+    libraries:
+      - PostgreSQL JDBC driver
+      - Apache Commons CSV 1.12.0
+      - Apache POI 5.4.1
+      - JJWT 0.12.6
+      - Lombok 1.18.46
+
+  - name: mini_billing_frontend
+    type: frontend_client
+    deployable_boundary: Vite React application
+    schema: mini_billing_frontend_schema.yaml
+    responsibility: Provide browser UI for file imports, invoice generation, billing results, and invoice lookup.
+    technology_stack: JavaScript ES modules
+    frameworks:
+      - React 18.3.1
+      - Vite 5.4.11
+    libraries:
+      - react-dom 18.3.1
+      - "@vitejs/plugin-react 4.3.4"
+
+module_endpoints:
+  mini_billing_backend:
+    auth:
+      - method: POST
+        path: /api/auth/login
+        authentication: public
+        request_contract: LoginRequest
+        response_contract: LoginResponse
+    admin_users:
+      - method: POST
+        path: /api/admin/users
+        authentication: JWT cookie with ADMIN role
+        request_contract: RegisterUserRequest
+        response_contract: UserResponse
+    file_imports:
+      - method: POST
+        path: /api/file/import
+        authentication: JWT cookie with ADMIN role
+        request_contract: FileImportRequest multipart form with files[n].type and files[n].file
+        response_contract: FileImportResponse
+    billing:
+      - method: GET
+        path: /api/billing/invoices/{id}
+        authentication: JWT cookie with USER or ADMIN role
+        request_contract: path invoice document number
+        response_contract: InvoiceResponse
+      - method: GET
+        path: /api/billing/invoices
+        authentication: JWT cookie with USER or ADMIN role
+        request_contract: optional reference and Spring Pageable query parameters
+        response_contract: PageResponse<InvoiceResponse>
+      - method: GET
+        path: /api/billing/readings
+        authentication: JWT cookie with USER or ADMIN role
+        request_contract: optional reference, service, source, from, to, and Spring Pageable query parameters
+        response_contract: PageResponse<ReadingResponse>
+      - method: POST
+        path: /api/billing/readings/self-reports
+        authentication: JWT cookie with USER role
+        request_contract: SelfReportRequest
+        response_contract: SelfReportResponse
+      - method: GET
+        path: /api/billing/readings/self-reports
+        authentication: JWT cookie with USER or ADMIN role
+        request_contract: optional status, reference, service, and Spring Pageable query parameters
+        response_contract: PageResponse<SelfReportResponse>
+      - method: POST
+        path: /api/billing/readings/self-reports/{id}/accept
+        authentication: JWT cookie with ADMIN role
+        request_contract: path id
+        response_contract: SelfReportResponse
+      - method: POST
+        path: /api/billing/readings/self-reports/{id}/deny
+        authentication: JWT cookie with ADMIN role
+        request_contract: path id
+        response_contract: SelfReportResponse
+      - method: POST
+        path: /api/billing/runs
+        authentication: JWT cookie with ADMIN role
+        request_contract: BillingRunRequest
+        response_contract: BillingRunResponse
+      - method: POST
+        path: /api/billing/runs/{runId}/stop
+        authentication: JWT cookie with ADMIN role
+        request_contract: path runId
+        response_contract: BillingRunResponse
+      - method: POST
+        path: /api/billing/runs/{runId}/resume
+        authentication: JWT cookie with ADMIN role
+        request_contract: path runId
+        response_contract: BillingRunResponse
+      - method: POST
+        path: /api/billing/runs/{runId}/restart
+        authentication: JWT cookie with ADMIN role
+        request_contract: path runId
+        response_contract: BillingRunResponse
+      - method: GET
+        path: /api/billing/runs/{runId}
+        authentication: JWT cookie with ADMIN role
+        request_contract: path runId
+        response_contract: BillingRunResponse
+      - method: GET
+        path: /api/billing/runs
+        authentication: JWT cookie with ADMIN role
+        request_contract: Spring Pageable query parameters
+        response_contract: PageResponse<BillingRunResponse>
+    reports:
+      - method: GET
+        path: /api/reports/billing-runs/{runId}
+        authentication: JWT cookie with ADMIN role
+        request_contract: path runId
+        response_contract: BillingReportResponse
+    audit:
+      - method: GET
+        path: /api/logs/audit
+        authentication: JWT cookie with ADMIN role
+        request_contract: Spring Pageable query parameters
+        response_contract: PageResponse<AuditLogResponse>
+      - method: GET
+        path: /api/logs/errors
+        authentication: JWT cookie with ADMIN role
+        request_contract: Spring Pageable query parameters
+        response_contract: PageResponse<BillingErrorLogResponse>
+
+  mini_billing_frontend:
+    browser_routes:
+      - path: /
+        responsibility: Render the current Mini Billing workspace UI.
+
+module_communication:
+  - source_module: mini_billing_frontend
+    target_module: mini_billing_backend
+    protocol: HTTP JSON and multipart/form-data
+    contracts_used:
+      - LoginRequest
+      - LoginResponse
+      - FileImportRequest
+      - PageResponse<InvoiceResponse>
+    data_flow: Frontend submits file imports, Billing Run requests, invoice lookup, readings, self-report, and report requests to backend REST endpoints.
+
+  - source_module: mini_billing_backend
+    target_module: PostgreSQL database
+    protocol: JDBC through Spring Data JPA and Hibernate
+    contracts_used:
+      - JPA entity mappings owned by mini_billing_backend
+    data_flow: Backend repositories persist and query user accounts, customers, readings, prices, file imports, invoices, lines, billing runs, audit logs, and error logs.
+
+storage:
+  - name: PostgreSQL database
+    owner_module: mini_billing_backend
+    technology: PostgreSQL
+    access_frameworks:
+      - Spring Data JPA
+      - Hibernate
+    configuration:
+      - Datasource URL, username, and password are read from application.yml environment placeholders.
+      - Hibernate ddl-auto is update.
+    owned_entities:
+      - User
+      - Customer
+      - Reading
+      - SelfReport
+      - Price
+      - Line
+      - Invoice
+      - FileImport
+      - BillingRun
+      - BillingRunItem
+      - BillingErrorLog
+
+infrastructure:
+  - name: Spring Boot runtime
+    owner_module: mini_billing_backend
+    responsibilities:
+      - Dependency injection
+      - Embedded HTTP server dispatch
+      - Transaction management
+      - Security filter chain
+      - Scheduled retention task execution
+  - name: Vite development runtime
+    owner_module: mini_billing_frontend
+    responsibilities:
+      - React development server
+      - Frontend production build
+
+security:
+  authentication:
+    owner_module: mini_billing_backend
+    mechanism: JWT in HttpOnly cookie mini_billing_auth
+    login_endpoint: POST /api/auth/login
+    token_claims:
+      - subject=username
+      - role=UserRole
+      - reference=Customer.reference for USER accounts; account reference for ADMIN accounts
+    default_seed_user:
+      username: admin
+      password: admin
+      role: ADMIN
+  authorization:
+    - ADMIN role is required for /api/admin/**, /api/file/import, /api/billing/runs/**, /api/reports/**, and /api/logs/**.
+    - ADMIN role is required for Billing Run management.
+    - USER role is required to submit self reports.
+    - ADMIN role is required to accept or decline self reports.
+    - USER or ADMIN role is required for invoice lookup, readings listing, and self-report listing endpoints.
+    - USER invoice lookup is constrained to the Customer linked to the authenticated account.
+    - USER reading and self-report lookup is constrained to the Customer linked to the authenticated account.
+
+unfinished_notes:
+  - Legacy /api/audit/logs, /api/audit/errors, /api/billing/generate, and /api/invoices/** routes were removed during final backend cleanup.
+  - Invoice PDF generation and download endpoints are not implemented.
+  - Flyway migrations exist through V8 for multipart imports, customer/account separation, Billing Run lifecycle support, reading sources, self reports, and invoice customer-period uniqueness; older Hibernate ddl-auto update remains configured.
+  - /api/file/import accepts CSV and XLSX files for customer, usage, and tariff imports.
+  - Billing Run processing uses persisted BillingRunItems as the per-customer cursor.
+
+architecture_warnings:
+  - Invoice number generation scans existing invoice numbers; the customer-period uniqueness constraint prevents duplicate customer invoices but document numbering still needs a production sequence for high concurrency.
+  - Billing Run processing is asynchronous in the application JVM; large production volumes may still need an external job runner.
+  - UserEntity still maps legacy name/reference/priceList columns for backward compatibility with earlier migrations, but billing ownership uses CustomerEntity.
+  - JWT bearer authentication remains supported as a compatibility fallback; cookie authentication is the primary browser contract.
+
+recommended_improvements:
+  - Replace count-based invoice numbering with a database sequence or locked document-number allocator.
+  - Add explicit Flyway or Liquibase migrations for production schema evolution.
+  - Configure app.security.cookie-secure=true for HTTPS production deployments.
+  - Add PDF invoice generation and authorized download endpoints.
+  - Add Billing Run cursoring or job execution if stop/resume must interrupt and continue long-running processing.
+
+implementation_order:
+  - Update frontend JWT login and Authorization header handling.
+  - Replace invoice number generation with a transactionally safe sequence.
+  - Add explicit database migrations for all current JPA entities.
+  - Implement PDF invoice generation and download.
+  - Add resilient Billing Run execution with resumable per-record progress.

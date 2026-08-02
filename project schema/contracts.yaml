@@ -1,0 +1,311 @@
+contracts:
+  shared_enums:
+    - name: Product
+      owner_module: mini_billing_backend
+      values:
+        - GAS
+        - ELEC
+      serialization:
+        json_value: gas, elec
+      validation:
+        - Public API responses serialize products as gas or elec.
+
+    - name: ImportType
+      owner_module: mini_billing_backend
+      values:
+        - USERS
+        - PRICES
+        - READINGS
+      validation:
+        - File import requests require one ImportType value.
+
+    - name: UserRole
+      owner_module: mini_billing_backend
+      values:
+        - USER
+        - ADMIN
+      authorization_rules:
+        - USER can read only invoices for the Customer linked to its account.
+        - ADMIN can register users, import files, manage Billing Runs, read all invoices, read reports, and read audit and error logs.
+
+    - name: BillingRunStatus
+      owner_module: mini_billing_backend
+      values:
+        - NOT_STARTED
+        - IN_PROGRESS
+        - PAUSED
+        - COMPLETED
+        - FAILED
+
+    - name: BillingRunItemStatus
+      owner_module: mini_billing_backend
+      values:
+        - PENDING
+        - PROCESSING
+        - PROCESSED
+        - FAILED
+        - WARNING
+
+    - name: ReadingSource
+      owner_module: mini_billing_backend
+      values:
+        - IMPORTED
+        - SELF_REPORTED
+
+    - name: SelfReportStatus
+      owner_module: mini_billing_backend
+      values:
+        - PENDING
+        - ACCEPTED
+        - DECLINED
+      serialization:
+        json_value: PENDING, ACCEPTED, DENIED
+        note: Internal DECLINED is exposed as DENIED in response DTOs.
+
+    - name: ErrorSeverity
+      owner_module: mini_billing_backend
+      values:
+        - INFO
+        - WARNING
+        - ERROR
+        - CRITICAL
+
+    - name: ErrorStatus
+      owner_module: mini_billing_backend
+      values:
+        - OPEN
+        - RESOLVED
+
+  identity_and_ownership_rules:
+    - name: Internal entity id
+      rule: Backend-generated entity ids are 32-character UUID strings without dashes.
+      owner_module: mini_billing_backend
+    - name: Customer reference
+      rule: Customer.reference is the customer-facing identifier used by invoice lookup, reading import association, and frontend userId fields.
+      owner_module: mini_billing_backend
+    - name: Invoice ownership
+      rule: Each Invoice belongs to one Customer; USER role access is limited to invoices for the Customer linked to the authenticated account, regardless of client-supplied reference parameters.
+      owner_module: mini_billing_backend
+    - name: Account ownership
+      rule: User accounts authenticate people or systems; USER accounts may link to exactly one Customer and ADMIN accounts have no Customer.
+      owner_module: mini_billing_backend
+    - name: File import ownership
+      rule: FileImport.uploadedBy references the authenticated ADMIN user; client-sent uploadedBy is accepted for frontend compatibility but is not trusted for attribution.
+      owner_module: mini_billing_backend
+    - name: Reading ownership
+      rule: Reading and SelfReport rows belong to Customer; USER access is limited to the Customer linked to the authenticated account regardless of client-supplied reference parameters.
+      owner_module: mini_billing_backend
+
+  api_error_response_shape:
+    owner_module: mini_billing_backend
+    contract_name: ProblemDetail
+    shape:
+      type: URI string
+      title: string
+      status: integer
+      detail: string
+      instance: URI string
+    usage:
+      - GlobalExceptionHandler returns Spring ProblemDetail for validation, parsing, billing, not-found, conflict, authentication, and unexpected server failures.
+
+  pagination_sorting_filtering:
+    contract_name: PageResponse
+    owner_module: mini_billing_backend
+    fields:
+      - content
+      - number
+      - size
+      - totalElements
+      - totalPages
+      - first
+      - last
+    conventions:
+      - Paginated endpoints accept Spring Pageable query parameters.
+      - Sorting uses Spring Data sort query syntax.
+      - Optional invoice filtering uses Customer.reference on GET /api/billing/invoices for ADMIN users.
+      - USER invoice filtering ignores client-supplied references and always uses the account's linked Customer.
+
+  shared_api_payloads:
+    - name: LoginRequest
+      producer: mini_billing_frontend
+      consumer: mini_billing_backend
+      fields:
+        username: nonblank string
+        password: nonblank string
+
+    - name: LoginResponse
+      producer: mini_billing_backend
+      consumer: mini_billing_frontend
+      fields:
+        username: string
+        role: UserRole
+        reference: Customer.reference for USER accounts; account reference for ADMIN accounts
+      transport_notes:
+        - JWT is issued in HttpOnly cookie mini_billing_auth, not in the response body.
+
+    - name: FileImportRequest
+      producer: mini_billing_frontend
+      consumer: mini_billing_backend
+      transport: multipart/form-data
+      fields:
+        files[n].type: ImportType alias string; CUSTOMERS/USERS, USAGE/READINGS, or TARIFFS/PRICES
+        files[n].file: uploaded CSV or XLSX file
+        uploadedBy: optional compatibility field ignored for trusted attribution
+      filename_contract:
+        - CUSTOMERS/USERS file must be customer_data.csv or customer_data.xlsx.
+        - USAGE/READINGS file must be usage_data.csv or usage_data.xlsx.
+        - TARIFFS/PRICES file must be tariff_plans.csv or tariff_plans.xlsx.
+      processing_order:
+        - USERS
+        - PRICES
+        - READINGS
+
+    - name: FileImportResponse
+      producer: mini_billing_backend
+      consumer: mini_billing_frontend
+      fields:
+        results: list of FileImportResult
+
+    - name: FileImportResult
+      producer: mini_billing_backend
+      consumer: mini_billing_frontend
+      fields:
+        type: ImportType
+        fileName: string
+        success: boolean
+        importedRecords: integer
+        errors: list of ImportValidationError
+
+    - name: ImportValidationError
+      producer: mini_billing_backend
+      consumer: mini_billing_frontend
+      fields:
+        row: nullable integer
+        field: string
+        message: string
+
+    - name: InvoiceResponse
+      producer: mini_billing_backend
+      consumer: mini_billing_frontend
+      fields:
+        id: string
+        documentNumber: string
+        documentDate: string
+        consumer: string
+        reference: string
+        periodStart: yyyy-MM-dd string
+        periodEnd: yyyy-MM-dd string
+        totalAmount: decimal
+        linesCount: integer
+        lines: list of InvoiceLineResponse
+
+    - name: InvoiceLineResponse
+      producer: mini_billing_backend
+      consumer: mini_billing_frontend
+      fields:
+        index: integer
+        product: gas or elec
+        quantity: decimal
+        amount: decimal
+        lineStart: string
+        lineEnd: string
+        priceList: string tariff code such as T1
+
+    - name: BillingReportResponse
+      producer: mini_billing_backend
+      consumer: mini_billing_frontend
+      fields:
+        runId: string
+        status: BillingRunStatus
+        processedRecords: integer
+        successfulInvoices: integer
+        failedRecords: integer
+        warningRecords: integer
+        duration: integer
+        failureSummary: string
+        run: BillingRunResponse
+
+    - name: BillingRunRequest
+      producer: mini_billing_frontend
+      consumer: mini_billing_backend
+      fields:
+        startDate: yyyy-MM-dd string
+        endDate: yyyy-MM-dd string
+        reference: all or Customer.reference
+
+    - name: BillingRunResponse
+      producer: mini_billing_backend
+      consumer: mini_billing_frontend
+      fields:
+        id: string
+        periodStart: string
+        periodEnd: string
+        status: BillingRunStatus
+        startedAt: string
+        endedAt: nullable string
+        startedBy: username string
+        processedRecords: integer
+        failedRecords: integer
+        warningRecords: integer
+        totalRecords: integer
+        frozenTariffVersion: string
+
+    - name: SelfReportRequest
+      producer: mini_billing_frontend
+      consumer: mini_billing_backend
+      fields:
+        date: yyyy-MM-dd string
+        service: gas or elec
+        amount: non-negative decimal
+
+    - name: SelfReportResponse
+      producer: mini_billing_backend
+      consumer: mini_billing_frontend
+      fields:
+        id: string
+        reference: Customer.reference
+        consumer: Customer.name
+        date: yyyy-MM-dd string
+        service: gas or elec
+        amount: decimal
+        status: PENDING, ACCEPTED, or DENIED
+        requestedAt: string
+        reviewedAt: nullable string
+        reviewedBy: nullable username string
+
+    - name: ReadingResponse
+      producer: mini_billing_backend
+      consumer: mini_billing_frontend
+      fields:
+        id: string
+        reference: Customer.reference
+        consumer: Customer.name
+        dateTime: ISO offset date-time string
+        product: gas or elec
+        lastReading: decimal
+        selfReported: boolean
+        invoiced: boolean
+
+  validation_rules:
+    - name: Legacy billing period format
+      rule: Legacy generate requests use yy-MM; USER accounts cannot call generation endpoints.
+    - name: Billing Run date format
+      rule: Billing Run startDate and endDate must match yyyy-MM-dd; startDate must not be after endDate; the current invoice schema supports one calendar month per run.
+    - name: Uploaded file presence
+      rule: File import requires at least one files[n].file part and a matching files[n].type field.
+    - name: Price file naming
+      rule: Tariff import accepts tariff_plans.csv or tariff_plans.xlsx; each tariff row is stored for GAS and ELEC products.
+    - name: CSV positional formats
+      rule: customer_data.csv has customer reference, customer name, tariff code; usage_data.csv has customer reference, product, reading date-time, meter reading; tariff_plans.csv has tariff code, valid from, valid to, unit price.
+    - name: Price value
+      rule: Price.price must be greater than 0 and less than or equal to 1000.
+    - name: Measurement quantity
+      rule: QuantityMeasurement.quantity must be greater than 0 and less than or equal to 1000000.
+    - name: Self report validation
+      rule: Self report date, service, and amount are required; service must be gas or elec; amount must not be negative; future dates are rejected; cumulative readings cannot be lower than the latest earlier reading for the same Customer and service.
+    - name: Unusual consumption warning
+      rule: Billing Run compares current period consumption with the immediately previous month for the same Customer and service. Deviation greater than 50 percent creates a WARNING item and warning log but still generates the invoice and continues the run. Exactly 50 percent is not a warning. A zero previous period has no meaningful percentage baseline and does not create a warning.
+
+  cross_module_event_contracts:
+    - name: none
+      rule: No asynchronous event contracts exist in the current architecture.

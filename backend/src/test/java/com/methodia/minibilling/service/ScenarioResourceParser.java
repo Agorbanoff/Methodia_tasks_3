@@ -58,11 +58,13 @@ final class ScenarioResourceParser {
                 case "P" -> {
                     requireColumnCount(values, 4, scenario, "in.txt", index + 2);
                     prices.add(new PriceEntity(
+                            null,
                             PRODUCT,
                             LocalDate.parse(values[1]),
                             LocalDate.parse(values[2]),
                             decimal(values[3]),
-                            PRICE_LIST
+                            PRICE_LIST,
+                            null
                     ));
                 }
                 default -> throw new IllegalArgumentException("%s/in.txt line %d has unknown row type: %s".formatted(scenario, index + 2, values[0]));

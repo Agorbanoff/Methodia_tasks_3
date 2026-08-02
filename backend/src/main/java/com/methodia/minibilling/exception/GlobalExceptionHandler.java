@@ -3,6 +3,7 @@ package com.methodia.minibilling.exception;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -48,6 +49,22 @@ public class GlobalExceptionHandler {
         return problemDetail;
     }
 
+    @ExceptionHandler(BillingRunStateException.class)
+    public ProblemDetail handleBillingRunState(BillingRunStateException exception) {
+        ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problemDetail.setTitle("Invalid billing run state");
+        problemDetail.setDetail(exception.getMessage());
+        return problemDetail;
+    }
+
+    @ExceptionHandler(SelfReportStateException.class)
+    public ProblemDetail handleSelfReportState(SelfReportStateException exception) {
+        ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problemDetail.setTitle("Invalid self report state");
+        problemDetail.setDetail(exception.getMessage());
+        return problemDetail;
+    }
+
     @ExceptionHandler(CsvRowParseException.class)
     public ProblemDetail handleCsvRowParseException(CsvRowParseException exception) {
         ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
@@ -63,6 +80,22 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleInvoiceNotFoundException(InvoiceNotFoundException exception) {
         ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
         problemDetail.setTitle("Invoice not found");
+        problemDetail.setDetail(exception.getMessage());
+        return problemDetail;
+    }
+
+    @ExceptionHandler(SelfReportNotFoundException.class)
+    public ProblemDetail handleSelfReportNotFoundException(SelfReportNotFoundException exception) {
+        ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+        problemDetail.setTitle("Self report not found");
+        problemDetail.setDetail(exception.getMessage());
+        return problemDetail;
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ProblemDetail handleBadCredentials(BadCredentialsException exception) {
+        ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.UNAUTHORIZED);
+        problemDetail.setTitle("Authentication failed");
         problemDetail.setDetail(exception.getMessage());
         return problemDetail;
     }

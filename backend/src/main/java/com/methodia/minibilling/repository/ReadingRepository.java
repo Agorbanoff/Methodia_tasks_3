@@ -1,20 +1,38 @@
 package com.methodia.minibilling.repository;
 
 import com.methodia.minibilling.model.Product;
+import com.methodia.minibilling.persistence.entity.CustomerEntity;
 import com.methodia.minibilling.persistence.entity.ReadingEntity;
-import com.methodia.minibilling.persistence.entity.UserEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ReadingRepository extends JpaRepository<ReadingEntity, String> {
 
-    List<ReadingEntity> findByUserOrderByDateTimeAsc(UserEntity user);
+    List<ReadingEntity> findByCustomerOrderByDateTimeAsc(CustomerEntity customer);
 
-    List<ReadingEntity> findByUserAndProductOrderByDateTimeAsc(UserEntity user, Product product);
+    List<ReadingEntity> findAllByOrderByDateTimeDesc();
 
-    boolean existsByUserAndProductAndDateTime(UserEntity user, Product product, OffsetDateTime dateTime);
+    List<ReadingEntity> findByCustomerOrderByDateTimeDesc(CustomerEntity customer);
+
+    List<ReadingEntity> findByCustomerAndProductOrderByDateTimeAsc(CustomerEntity customer, Product product);
+
+    boolean existsByCustomerAndProductAndDateTime(CustomerEntity customer, Product product, OffsetDateTime dateTime);
+
+    boolean existsByCustomerAndProductAndDateTimeGreaterThanEqualAndDateTimeLessThan(
+            CustomerEntity customer,
+            Product product,
+            OffsetDateTime start,
+            OffsetDateTime end
+    );
+
+    Optional<ReadingEntity> findFirstByCustomerAndProductAndDateTimeBeforeOrderByDateTimeDesc(
+            CustomerEntity customer,
+            Product product,
+            OffsetDateTime dateTime
+    );
 }

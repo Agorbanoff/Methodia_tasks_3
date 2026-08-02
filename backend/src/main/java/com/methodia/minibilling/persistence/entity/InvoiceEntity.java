@@ -12,6 +12,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -28,7 +29,13 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Entity
-@Table(name = "invoices")
+@Table(
+        name = "invoices",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_invoices_customer_period",
+                columnNames = {"customer_id", "billing_year", "billing_month"}
+        )
+)
 public class InvoiceEntity {
 
     @Id
@@ -42,8 +49,8 @@ public class InvoiceEntity {
     private String number;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
-    private UserEntity user;
+    @JoinColumn(name = "customer_id", nullable = false)
+    private CustomerEntity customer;
 
     @Column(name = "total_amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal totalAmount;
@@ -60,15 +67,6 @@ public class InvoiceEntity {
     @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("lineId ASC")
     private List<InvoiceLineEntity> lines = new ArrayList<>();
-
-    public InvoiceEntity(OffsetDateTime dateTime, String number, UserEntity user, BigDecimal totalAmount, int billingYear, int billingMonth) {
-        this.dateTime = dateTime;
-        this.number = number;
-        this.user = user;
-        this.totalAmount = totalAmount;
-        this.billingYear = billingYear;
-        this.billingMonth = billingMonth;
-    }
 
     @PrePersist
     void prePersist() {

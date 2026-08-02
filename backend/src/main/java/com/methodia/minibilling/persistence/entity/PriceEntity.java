@@ -49,16 +49,23 @@ public class PriceEntity {
     @Column(name = "price_list", nullable = false)
     private int priceList;
 
+    @Column(name = "tariff_code", length = 50)
+    private String tariffCode;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "file_import_id")
     private FileImportEntity fileImport;
 
-    public PriceEntity(Product product, LocalDate startDate, LocalDate endDate, BigDecimal price, int priceList) {
+    public PriceEntity(String id, Product product, LocalDate startDate, LocalDate endDate, BigDecimal price,
+                       int priceList, FileImportEntity fileImport) {
+        this.id = id;
         this.product = product;
         this.startDate = startDate;
         this.endDate = endDate;
         this.price = price;
         this.priceList = priceList;
+        this.tariffCode = "T" + priceList;
+        this.fileImport = fileImport;
     }
 
     @PrePersist

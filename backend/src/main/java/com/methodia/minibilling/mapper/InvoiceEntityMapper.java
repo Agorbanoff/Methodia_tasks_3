@@ -6,17 +6,24 @@ import com.methodia.minibilling.persistence.entity.InvoiceEntity;
 import com.methodia.minibilling.persistence.entity.InvoiceLineEntity;
 import org.springframework.stereotype.Component;
 
-import java.util.Locale;
+import java.time.LocalDate;
+import java.time.YearMonth;
 
 @Component
 public class InvoiceEntityMapper {
 
     public Invoice toModel(InvoiceEntity invoice) {
+        YearMonth invoiceMonth = YearMonth.of(invoice.getBillingYear(), invoice.getBillingMonth());
+        LocalDate periodStart = invoiceMonth.atDay(1);
+        LocalDate periodEnd = invoiceMonth.atEndOfMonth();
         return new Invoice(
+                invoice.getId(),
                 invoice.getDateTime().toInstant(),
                 invoice.getNumber(),
-                invoice.getUser().getName(),
-                invoice.getUser().getReference(),
+                invoice.getCustomer().getName(),
+                invoice.getCustomer().getReference(),
+                periodStart.toString(),
+                periodEnd.toString(),
                 invoice.getTotalAmount(),
                 invoice.getLines().stream()
                         .map(this::toModel)
@@ -30,7 +37,7 @@ public class InvoiceEntityMapper {
                 line.getQuantity(),
                 line.getStartDateTime().toInstant(),
                 line.getEndDateTime().toInstant(),
-                line.getProduct().name().toLowerCase(Locale.ROOT),
+                line.getProduct() == com.methodia.minibilling.model.Product.ELECT ? "elec" : "gas",
                 line.getPrice(),
                 line.getPriceList(),
                 line.getAmount()

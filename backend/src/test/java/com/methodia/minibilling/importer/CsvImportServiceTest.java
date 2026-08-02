@@ -1,38 +1,44 @@
 package com.methodia.minibilling.importer;
 
-import com.methodia.minibilling.config.BillingProperties;
-import com.methodia.minibilling.exception.CsvRowParseException;
+import com.methodia.minibilling.model.ImportType;
 import com.methodia.minibilling.model.Product;
+import com.methodia.minibilling.persistence.entity.CustomerEntity;
 import com.methodia.minibilling.persistence.entity.UserEntity;
+import com.methodia.minibilling.repository.CustomerRepository;
+import com.methodia.minibilling.repository.FileImportRepository;
 import com.methodia.minibilling.repository.PriceRepository;
 import com.methodia.minibilling.repository.ReadingRepository;
 import com.methodia.minibilling.repository.UserRepository;
-import com.methodia.minibilling.repository.FileImportRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.TestPropertySource;
 
-import java.math.BigDecimal;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.UUID;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
-@Transactional
+@TestPropertySource(properties = "app.audit.log-file=target/test-audit-import.log")
 class CsvImportServiceTest {
 
     @Autowired
+    private CsvImportService csvImportService;
+
+    @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private CustomerRepository customerRepository;
 
     @Autowired
     private ReadingRepository readingRepository;
@@ -43,173 +49,272 @@ class CsvImportServiceTest {
     @Autowired
     private FileImportRepository fileImportRepository;
 
-    @TempDir
-    private Path tempDir;
-
-    private CsvImportService csvImportService;
-    private String suffix;
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
-    void setUp() {
-        suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-        csvImportService = new CsvImportService(
-                new BillingProperties(tempDir.toString(), tempDir.resolve("out").toString()),
-                userRepository,
-                readingRepository,
-                priceRepository,
-                fileImportRepository,
-                Clock.fixed(Instant.parse("2024-04-01T10:15:30Z"), ZoneOffset.UTC)
-        );
+    void cleanDatabase() {
+        jdbcTemplate.execute("""
+                truncate table invoice_lines, invoices, readings, prices, file_imports,
+                self_reports, billing_run_items, billing_runs, billing_error_logs, users, customers restart identity cascade
+                """);
+        UserEntity admin = new UserEntity(null, "Administrator", "admin", 0, new ArrayList<>());
+        admin.setUsername("admin");
+        admin.setPasswordHash("hash");
+        admin.setRole("ADMIN");
+        userRepository.save(admin);
     }
 
     @Test
-    void importsUsersCsvAndUpdatesExistingUserByReference() throws Exception {
-        Path usersCsv = write("users.csv", """
-                First User,%s-1,1
-                Existing User,%s-2,1
-                """.formatted(suffix, suffix));
-        csvImportService.importUsers(usersCsv);
+    void importsValidCustomerCsvWithoutHeader() {
+        var response = csvImportService.importFiles(List.of(upload(ImportType.USERS, "customer_data.csv",
+                """
+                DUMMY-1001,Acme Gas Household,T1
+                DUMMY-1002,Beta Electric Shop,T2
+                """)), "admin");
 
-        Path updatedUsersCsv = write("users-updated.csv", """
-                Updated User,%s-2,2
-                """.formatted(suffix));
-        CsvImportSummary summary = csvImportService.importUsers(updatedUsersCsv);
-
-        assertThat(summary.importedUsers()).isEqualTo(1);
-        assertThat(userRepository.findByReference(suffix + "-1")).isPresent();
-        assertThat(userRepository.findByReference(suffix + "-2"))
-                .get()
-                .satisfies(user -> {
-                    assertThat(user.getName()).isEqualTo("Updated User");
-                    assertThat(user.getPriceList()).isEqualTo(2);
-                });
+        assertThat(response.results().getFirst().success())
+                .withFailMessage(() -> response.results().getFirst().errors().toString())
+                .isTrue();
+        assertThat(response.results().getFirst().importedRecords()).isEqualTo(2);
+        assertThat(customerRepository.findByReference("DUMMY-1001")).hasValueSatisfying(customer -> {
+            assertThat(customer.getName()).isEqualTo("Acme Gas Household");
+            assertThat(customer.getTariffCode()).isEqualTo("T1");
+        });
+        assertThat(userRepository.findByReference("DUMMY-1001")).isEmpty();
     }
 
     @Test
-    void importsReadingsCsvForExistingUsers() throws Exception {
-        UserEntity user = userRepository.save(new UserEntity("Reader User", suffix + "-reader", 1));
-        Path readingsCsv = write("readings.csv", """
-                %s-reader,gas,2024-01-01T12:00:00+02:00,1480.125
-                %s-reader,elec,2024-02-01T12:00:00+02:00,1600
-                """.formatted(suffix, suffix));
+    void importsValidCustomerXlsxWithHeader() {
+        var response = csvImportService.importFiles(List.of(xlsxUpload(ImportType.USERS, "customer_data.xlsx",
+                List.of("customer reference", "customer name", "tariff code"),
+                List.of("DUMMY-1001", "Acme Gas Household", "T1"),
+                List.of("DUMMY-1002", "Beta Electric Shop", "T2")
+        )), "admin");
 
-        CsvImportSummary summary = csvImportService.importReadings(readingsCsv);
+        assertThat(response.results().getFirst().success())
+                .withFailMessage(() -> response.results().getFirst().errors().toString())
+                .isTrue();
+        assertThat(response.results().getFirst().importedRecords()).isEqualTo(2);
+        assertThat(customerRepository.findByReference("DUMMY-1001")).hasValueSatisfying(customer -> {
+            assertThat(customer.getName()).isEqualTo("Acme Gas Household");
+            assertThat(customer.getTariffCode()).isEqualTo("T1");
+        });
+        assertThat(userRepository.findByReference("DUMMY-1001")).isEmpty();
+    }
 
-        assertThat(summary.importedReadings()).isEqualTo(2);
-        assertThat(summary.skippedDuplicates()).isZero();
-        assertThat(readingRepository.findByUserOrderByDateTimeAsc(user)).hasSize(2);
-        assertThat(readingRepository.findByUserAndProductOrderByDateTimeAsc(user, Product.GAS))
+    @Test
+    void customerImportRejectsDuplicateReferenceAndRollsBackWholeFile() {
+        var response = csvImportService.importFiles(List.of(upload(ImportType.USERS, "customer_data.csv",
+                """
+                DUMMY-1001,Acme,T1
+                DUMMY-1001,Duplicate,T1
+                """)), "admin");
+
+        assertThat(response.results().getFirst().success()).isFalse();
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("Duplicate customer reference"));
+        assertThat(customerRepository.findByReference("DUMMY-1001")).isEmpty();
+    }
+
+    @Test
+    void customerImportRejectsMissingColumnAndEmptyReference() {
+        var response = csvImportService.importFiles(List.of(upload(ImportType.USERS, "customer_data.csv",
+                ",Acme\n")), "admin");
+
+        assertThat(response.results().getFirst().success()).isFalse();
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.field()).isEqualTo("columns"));
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.field()).isEqualTo("reference"));
+    }
+
+    @Test
+    void importsValidTariffCsvAndCreatesProductPricesForStringTariffCode() {
+        var response = csvImportService.importFiles(List.of(upload(ImportType.PRICES, "tariff_plans.csv",
+                """
+                T1,2026-07-01,2026-07-15,1.05
+                T1,2026-07-16,2026-07-31,1.12
+                """)), "admin");
+
+        assertThat(response.results().getFirst().success()).isTrue();
+        assertThat(priceRepository.findByTariffCodeAndProductOrderByStartDateAsc("T1", Product.GAS)).hasSize(2);
+        assertThat(priceRepository.findByTariffCodeAndProductOrderByStartDateAsc("T1", Product.ELECT)).hasSize(2);
+    }
+
+    @Test
+    void importsValidTariffXlsx() {
+        var response = csvImportService.importFiles(List.of(xlsxUpload(ImportType.PRICES, "tariff_plans.xlsx",
+                List.of("tariff code", "valid from", "valid to", "unit price"),
+                List.of("T1", "2026-07-01", "2026-07-15", "1.05"),
+                List.of("T1", "2026-07-16", "2026-07-31", "1.12")
+        )), "admin");
+
+        assertThat(response.results().getFirst().success()).isTrue();
+        assertThat(priceRepository.findByTariffCodeAndProductOrderByStartDateAsc("T1", Product.GAS)).hasSize(2);
+        assertThat(priceRepository.findByTariffCodeAndProductOrderByStartDateAsc("T1", Product.ELECT)).hasSize(2);
+    }
+
+    @Test
+    void tariffImportRejectsInvalidRowsAndRollsBackWholeFile() {
+        var response = csvImportService.importFiles(List.of(upload(ImportType.PRICES, "tariff_plans.csv",
+                """
+                T1,2026-07-16,2026-07-01,0
+                T1,not-a-date,2026-07-31,1.12
+                """)), "admin");
+
+        assertThat(response.results().getFirst().success()).isFalse();
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("Valid from must not be after valid to"));
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("Unit price must be greater than zero"));
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("Invalid ISO date"));
+        assertThat(priceRepository.findByTariffCodeAndProductOrderByStartDateAsc("T1", Product.GAS)).isEmpty();
+    }
+
+    @Test
+    void tariffImportRejectsOverlappingPeriodsAndDuplicateRows() {
+        var response = csvImportService.importFiles(List.of(upload(ImportType.PRICES, "tariff_plans.csv",
+                """
+                T1,2026-07-01,2026-07-15,1.05
+                T1,2026-07-01,2026-07-15,1.05
+                T1,2026-07-10,2026-07-31,1.12
+                """)), "admin");
+
+        assertThat(response.results().getFirst().success()).isFalse();
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("Duplicate tariff row"));
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("Overlapping tariff period"));
+    }
+
+    @Test
+    void importsValidUsageCsvWithElecAndOffsetDateTime() {
+        CustomerEntity customer = saveCustomer("DUMMY-1001", "T1");
+
+        var response = csvImportService.importFiles(List.of(upload(ImportType.READINGS, "usage_data.csv",
+                """
+                DUMMY-1001,elec,2026-07-01T00:00:00+03:00,1000.00
+                DUMMY-1001,gas,2026-07-31T23:59:59+03:00,1137.50
+                """)), "admin");
+
+        assertThat(response.results().getFirst().success()).isTrue();
+        assertThat(readingRepository.findByCustomerAndProductOrderByDateTimeAsc(customer, Product.ELECT))
                 .singleElement()
                 .satisfies(reading -> {
-                    assertThat(reading.getLastReading()).isEqualByComparingTo(new BigDecimal("1480.125"));
-                    assertThat(reading.isInvoiced()).isFalse();
-                    assertThat(reading.isSelfReported()).isFalse();
-                    assertThat(reading.getFileImport().getFilename()).isEqualTo("readings.csv");
+                    assertThat(reading.getDateTime()).isEqualTo(OffsetDateTime.parse("2026-07-01T00:00:00+03:00"));
+                    assertThat(reading.getSource()).isEqualTo(com.methodia.minibilling.model.ReadingSource.IMPORTED);
                 });
     }
 
     @Test
-    void importsPricesCsvForMultiplePriceLists() throws Exception {
-        int priceListOne = uniquePriceList(1);
-        int priceListTwo = uniquePriceList(2);
-        Path pricesOneCsv = write("prices-1.csv", """
-                gas,2024-01-01,2024-12-31,1.8000
-                """);
-        Path pricesTwoCsv = write("prices-2.csv", """
-                gas,2024-01-01,2024-06-30,1.7000
-                elec,2024-07-01,2024-12-31,0.3000
-                """);
+    void importsValidUsageXlsxAndRollsBackMalformedWorkbook() {
+        CustomerEntity customer = saveCustomer("DUMMY-1001", "T1");
 
-        CsvImportSummary firstSummary = csvImportService.importPrices(pricesOneCsv, priceListOne);
-        CsvImportSummary secondSummary = csvImportService.importPrices(pricesTwoCsv, priceListTwo);
+        var valid = csvImportService.importFiles(List.of(xlsxUpload(ImportType.READINGS, "usage_data.xlsx",
+                List.of("customer reference", "product", "reading date-time", "meter reading"),
+                List.of("DUMMY-1001", "elec", "2026-07-01T00:00:00+03:00", "1000.00")
+        )), "admin");
 
-        assertThat(firstSummary.importedPrices()).isEqualTo(1);
-        assertThat(secondSummary.importedPrices()).isEqualTo(2);
-        assertThat(priceRepository.findByPriceListAndProductOrderByStartDateAsc(priceListOne, Product.GAS)).hasSize(1);
-        assertThat(priceRepository.findByPriceListAndProductOrderByStartDateAsc(priceListTwo, Product.GAS)).hasSize(1);
-        assertThat(priceRepository.findByPriceListAndProductOrderByStartDateAsc(priceListTwo, Product.ELECT)).hasSize(1);
+        assertThat(valid.results().getFirst().success())
+                .withFailMessage(() -> valid.results().getFirst().errors().toString())
+                .isTrue();
+        assertThat(readingRepository.findByCustomerAndProductOrderByDateTimeAsc(customer, Product.ELECT))
+                .singleElement()
+                .satisfies(reading ->
+                        assertThat(reading.getDateTime()).isEqualTo(OffsetDateTime.parse("2026-07-01T00:00:00+03:00")));
+
+        var malformed = csvImportService.importFiles(List.of(new FileImportUpload("READINGS",
+                new MockMultipartFile("file", "usage_data.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "not a workbook".getBytes(StandardCharsets.UTF_8)))), "admin");
+
+        assertThat(malformed.results().getFirst().success()).isFalse();
+        assertThat(malformed.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("Could not read uploaded workbook"));
+        assertThat(readingRepository.count()).isEqualTo(1);
     }
 
     @Test
-    void repeatedImportDoesNotCreateReadingOrPriceDuplicates() throws Exception {
-        UserEntity user = userRepository.save(new UserEntity("Duplicate User", suffix + "-dup", 1));
-        int priceList = uniquePriceList(3);
-        Path readingsCsv = write("readings.csv", """
-                %s-dup,gas,2024-01-01T12:00:00+02:00,100
-                """.formatted(suffix));
-        Path pricesCsv = write("prices-3.csv", """
-                gas,2024-01-01,2024-12-31,1.8000
-                """);
+    void usageImportRejectsUnknownInvalidNegativeDuplicateAndRollsBack() {
+        saveCustomer("DUMMY-1001", "T1");
 
-        csvImportService.importReadings(readingsCsv);
-        csvImportService.importPrices(pricesCsv, priceList);
-        CsvImportSummary duplicateReadings = csvImportService.importReadings(readingsCsv);
-        CsvImportSummary duplicatePrices = csvImportService.importPrices(pricesCsv, priceList);
+        var response = csvImportService.importFiles(List.of(upload(ImportType.READINGS, "usage_data.csv",
+                """
+                DUMMY-9999,gas,2026-07-01T00:00:00+03:00,1000.00
+                DUMMY-1001,water,2026-07-01T00:00:00+03:00,1000.00
+                DUMMY-1001,gas,2026-07-01T00:00:00+03:00,-1.00
+                DUMMY-1001,gas,2026-07-01T00:00:00+03:00,1000.00
+                """)), "admin");
 
-        assertThat(duplicateReadings.skippedDuplicates()).isEqualTo(1);
-        assertThat(duplicatePrices.skippedDuplicates()).isEqualTo(1);
-        assertThat(readingRepository.findByUserAndProductOrderByDateTimeAsc(user, Product.GAS)).hasSize(1);
-        assertThat(priceRepository.findByPriceListAndProductOrderByStartDateAsc(priceList, Product.GAS)).hasSize(1);
+        assertThat(response.results().getFirst().success()).isFalse();
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("Unknown customer reference"));
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("Invalid product"));
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("must not be negative"));
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("Duplicate reading"));
+        assertThat(readingRepository.count()).isZero();
     }
 
     @Test
-    void importAllDiscoversPricesFilesAndAggregatesSummary() throws Exception {
-        write("users.csv", """
-                Import All User,%s-all,1
-                """.formatted(suffix));
-        write("readings.csv", """
-                %s-all,gas,2024-01-01T12:00:00+02:00,100
-                """.formatted(suffix));
-        write("prices-1.csv", """
-                gas,2024-01-01,2024-06-30,1.8000
-                """);
-        write("prices-2.csv", """
-                elec,2024-01-01,2024-06-30,0.3000
-                """);
+    void invalidExtensionAndWrongLogicalFileNameReturnValidationResponse() {
+        var response = csvImportService.importFiles(List.of(upload(ImportType.USERS, "usage_data.txt",
+                "DUMMY-1001,Acme,T1\n")), "admin");
 
-        CsvImportSummary summary = csvImportService.importAllFromInputDirectory();
-
-        assertThat(summary.importedUsers()).isEqualTo(1);
-        assertThat(summary.importedReadings()).isEqualTo(1);
-        assertThat(summary.importedPrices()).isEqualTo(2);
-        assertThat(summary.skippedDuplicates()).isZero();
-        assertThat(summary.errors()).isEmpty();
+        assertThat(response.results().getFirst().success()).isFalse();
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("Only .csv and .xlsx imports are supported"));
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("customer_data.csv or customer_data.xlsx"));
     }
 
     @Test
-    void invalidProductReturnsClearCsvError() throws Exception {
-        userRepository.save(new UserEntity("Invalid Product User", suffix + "-invalid-product", 1));
-        Path readingsCsv = write("readings.csv", """
-                %s-invalid-product,water,2024-01-01T12:00:00+02:00,100
-                """.formatted(suffix));
+    void multiFileRequestProcessesCustomerTariffUsageInLogicalOrder() {
+        var response = csvImportService.importFiles(List.of(
+                upload(ImportType.READINGS, "usage_data.csv", "DUMMY-1001,gas,2026-07-01T00:00:00+03:00,1000.00\n"),
+                upload(ImportType.PRICES, "tariff_plans.csv", "T1,2026-07-01,2026-07-31,1.05\n"),
+                upload(ImportType.USERS, "customer_data.csv", "DUMMY-1001,Acme,T1\n")
+        ), "admin");
 
-        assertThatThrownBy(() -> csvImportService.importReadings(readingsCsv))
-                .isInstanceOf(CsvRowParseException.class)
-                .hasMessageContaining("readings.csv")
-                .hasMessageContaining("line 1")
-                .hasMessageContaining("Invalid product");
+        assertThat(response.results()).extracting(result -> result.type())
+                .containsExactly("USERS", "PRICES", "READINGS");
+        assertThat(response.results()).allSatisfy(result -> assertThat(result.success()).isTrue());
+        assertThat(customerRepository.findByReference("DUMMY-1001")).isPresent();
+        assertThat(userRepository.findByReference("DUMMY-1001")).isEmpty();
+        assertThat(readingRepository.count()).isEqualTo(1);
     }
 
-    @Test
-    void missingUserReferenceInReadingReturnsClearCsvError() throws Exception {
-        Path readingsCsv = write("readings.csv", """
-                missing-reference,gas,2024-01-01T12:00:00+02:00,100
-                """);
-
-        assertThatThrownBy(() -> csvImportService.importReadings(readingsCsv))
-                .isInstanceOf(CsvRowParseException.class)
-                .hasMessageContaining("readings.csv")
-                .hasMessageContaining("line 1")
-                .hasMessageContaining("Unknown user reference: 'missing-reference'");
+    private CustomerEntity saveCustomer(String reference, String tariffCode) {
+        return customerRepository.save(new CustomerEntity(reference, "Customer", tariffCode));
     }
 
-    private Path write(String fileName, String content) throws Exception {
-        Path file = tempDir.resolve(fileName);
-        Files.writeString(file, content, StandardCharsets.UTF_8);
-        return file;
+    private FileImportUpload upload(ImportType type, String fileName, String content) {
+        return new FileImportUpload(type.name(),
+                new MockMultipartFile("file", fileName, "text/csv", content.getBytes(StandardCharsets.UTF_8)));
     }
 
-    private int uniquePriceList(int offset) {
-        return 100_000 + Integer.parseInt(suffix.substring(0, 4), 16) + offset;
+    private FileImportUpload xlsxUpload(ImportType type, String fileName, List<String>... rows) {
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            var sheet = workbook.createSheet("data");
+            for (int rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+                var row = sheet.createRow(rowIndex);
+                List<String> values = rows[rowIndex];
+                for (int columnIndex = 0; columnIndex < values.size(); columnIndex++) {
+                    row.createCell(columnIndex).setCellValue(values.get(columnIndex));
+                }
+            }
+            workbook.write(output);
+            return new FileImportUpload(type.name(),
+                    new MockMultipartFile("file", fileName,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            output.toByteArray()));
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not create test workbook", exception);
+        }
     }
 }

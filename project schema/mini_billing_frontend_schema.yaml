@@ -1,0 +1,119 @@
+module:
+  name: mini_billing_frontend
+  description: React/Vite browser client for MiniBilling.
+  responsibility: Render the billing workspace UI, collect import and billing generation inputs, call backend APIs, and display billing results and invoice history.
+  technology_stack: JavaScript ES modules
+  frameworks:
+    - React 18.3.1
+    - Vite 5.4.11
+  libraries:
+    - react-dom 18.3.1
+    - "@vitejs/plugin-react 4.3.4"
+  dependencies:
+    internal_contracts:
+      - BillingRequest
+      - FileImportRequest
+      - BillingResponse
+      - PageResponse<InvoiceResponse>
+    external_systems:
+      - mini_billing_backend REST API
+  consumed_contracts:
+    - FileImportRequest
+    - BillingRequest
+    - BillingResponse
+    - PageResponse<InvoiceResponse>
+  exposed_contracts:
+    - Browser route /
+
+communication_relationships:
+  - direction: mini_billing_frontend -> mini_billing_backend
+    protocol: HTTP multipart/form-data and HTTP GET
+    data_flow: Frontend sends file imports, billing generation requests, and invoice lookup requests.
+    contracts_used:
+      - FileImportRequest
+      - BillingRequest
+      - BillingResponse
+      - PageResponse<InvoiceResponse>
+
+apis:
+  exposed:
+    - method: GET
+      path: /
+      authentication: none at frontend route level
+      request_contract: browser navigation
+      response_contract: rendered React application
+      validation_summary: none
+      ownership_rule: none at frontend route level
+      side_effects: none
+
+  consumed:
+    - method: POST
+      path: /api/file/import
+      authentication: backend requires JWT bearer token with ADMIN role
+      request_contract: FileImportRequest multipart form
+      response_contract: empty body
+    - method: POST
+      path: /api/billing/generate
+      authentication: backend requires JWT bearer token with USER or ADMIN role
+      request_contract: BillingRequest multipart form
+      response_contract: BillingResponse
+    - method: GET
+      path: /api/billing/invoices/{userId}
+      authentication: backend requires JWT bearer token with USER or ADMIN role
+      request_contract: path userId and pagination query parameters
+      response_contract: PageResponse<InvoiceResponse>
+
+implementation_layers:
+  presentation:
+    components:
+      - App.jsx
+      - BillingUploadForm.jsx
+      - BillingResult.jsx
+      - FileImportForm.jsx
+      - InvoiceLookup.jsx
+    request_dtos:
+      - JavaScript FormData payloads for file import and billing generation.
+    response_dtos:
+      - Normalized BillingResponse object.
+      - Normalized PageResponse object.
+    validation:
+      - Form-level required field validation is handled by current component input constraints and submit behavior.
+    error_mapping:
+      - src/api/billingApi.js normalizes backend errors from errors, message, or error fields into thrown Error messages.
+
+  business_logic:
+    services:
+      - src/api/billingApi.js
+    use_cases:
+      - Submit file imports.
+      - Submit single-user billing generation.
+      - Fetch paginated invoice history.
+    domain_rules:
+      - API base URL is read from VITE_API_BASE_URL and normalized by trimming trailing slash.
+    transaction_boundaries:
+      - Browser client has no transaction ownership.
+    module_events:
+      - No event contracts are implemented.
+
+  persistence:
+    entities:
+      - Browser client owns no persistent entities.
+    repositories:
+      - Browser client owns no repositories.
+    migrations:
+      - Browser client owns no migrations.
+    indexes:
+      - Browser client owns no indexes.
+    constraints:
+      - Browser client owns no database constraints.
+
+implementation_notes:
+  - Current API client does not yet implement POST /api/auth/login.
+  - Current API client does not yet persist JWT token state.
+  - Current API client does not yet attach Authorization bearer headers to backend calls.
+  - Existing visible workflow consists of import files, generate billing, display billing result, and invoice lookup.
+
+unfinished_notes:
+  - Frontend authentication UI is missing.
+  - Frontend role-aware navigation is missing.
+  - Frontend Billing Run, report, audit, admin user registration, and error-log screens are missing.
