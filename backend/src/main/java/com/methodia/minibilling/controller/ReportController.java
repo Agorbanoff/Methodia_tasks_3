@@ -1,7 +1,7 @@
 package com.methodia.minibilling.controller;
 
 import com.methodia.minibilling.controller.dto.report.BillingReportResponse;
-import com.methodia.minibilling.service.BillingRunService;
+import com.methodia.minibilling.service.billing.BillingRunService;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

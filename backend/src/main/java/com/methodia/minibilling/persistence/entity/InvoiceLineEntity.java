@@ -1,6 +1,6 @@
 package com.methodia.minibilling.persistence.entity;
 
-import com.methodia.minibilling.model.Product;
+import com.methodia.minibilling.model.tariff.Product;
 import com.methodia.minibilling.persistence.IdGenerator;
 import jakarta.persistence.*;
 import lombok.AccessLevel;

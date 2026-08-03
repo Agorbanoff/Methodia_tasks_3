@@ -1,7 +1,7 @@
 package com.methodia.minibilling.controller.dto.report;
 
-import com.methodia.minibilling.model.ErrorSeverity;
-import com.methodia.minibilling.model.ErrorStatus;
+import com.methodia.minibilling.model.error.ErrorSeverity;
+import com.methodia.minibilling.model.error.ErrorStatus;
 
 import java.time.OffsetDateTime;
 

@@ -1,6 +1,6 @@
 package com.methodia.minibilling.controller.dto.user;
 
-import com.methodia.minibilling.model.UserRole;
+import com.methodia.minibilling.model.auth.UserRole;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

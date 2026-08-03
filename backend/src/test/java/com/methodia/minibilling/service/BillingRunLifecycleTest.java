@@ -1,11 +1,16 @@
 package com.methodia.minibilling.service;
 
+import com.methodia.minibilling.service.billing.BillingRunService;
+import com.methodia.minibilling.service.billing.BillingService;
+import com.methodia.minibilling.service.billing.TariffSnapshotService;
+import com.methodia.minibilling.service.audit.BillingErrorLogService;
+
 import com.methodia.minibilling.controller.dto.billing.BillingRunRequest;
-import com.methodia.minibilling.model.BillingRunStatus;
-import com.methodia.minibilling.model.BillingRunItemStatus;
-import com.methodia.minibilling.model.ErrorSeverity;
-import com.methodia.minibilling.model.Product;
-import com.methodia.minibilling.model.ReadingSource;
+import com.methodia.minibilling.model.billing.BillingRunStatus;
+import com.methodia.minibilling.model.billing.BillingRunItemStatus;
+import com.methodia.minibilling.model.error.ErrorSeverity;
+import com.methodia.minibilling.model.tariff.Product;
+import com.methodia.minibilling.model.reading.ReadingSource;
 import com.methodia.minibilling.persistence.entity.BillingRunEntity;
 import com.methodia.minibilling.persistence.entity.CustomerEntity;
 import com.methodia.minibilling.persistence.entity.PriceEntity;
@@ -13,7 +18,6 @@ import com.methodia.minibilling.persistence.entity.ReadingEntity;
 import com.methodia.minibilling.persistence.entity.UserEntity;
 import com.methodia.minibilling.repository.BillingRunItemRepository;
 import com.methodia.minibilling.repository.BillingRunRepository;
-import com.methodia.minibilling.repository.BillingErrorLogRepository;
 import com.methodia.minibilling.repository.CustomerRepository;
 import com.methodia.minibilling.repository.FileImportRepository;
 import com.methodia.minibilling.repository.InvoiceLineRepository;
@@ -29,6 +33,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
@@ -55,7 +61,7 @@ class BillingRunLifecycleTest {
     private BillingRunItemRepository billingRunItemRepository;
 
     @Autowired
-    private BillingErrorLogRepository billingErrorLogRepository;
+    private BillingErrorLogService billingErrorLogService;
 
     @Autowired
     private CustomerRepository customerRepository;
@@ -158,9 +164,9 @@ class BillingRunLifecycleTest {
                     assertThat(item.getStatus()).isEqualTo(BillingRunItemStatus.WARNING);
                     assertThat(item.getSeverity()).isEqualTo(ErrorSeverity.WARNING);
                 });
-        assertThat(billingErrorLogRepository.findAll())
+        assertThat(billingErrorLogService.list(org.springframework.data.domain.PageRequest.of(0, 20)).getContent())
                 .singleElement()
-                .satisfies(log -> assertThat(log.getSeverity()).isEqualTo(ErrorSeverity.WARNING));
+                .satisfies(log -> assertThat(log.severity()).isEqualTo(ErrorSeverity.WARNING));
     }
 
     @Test
@@ -309,7 +315,11 @@ class BillingRunLifecycleTest {
     }
 
     private void cleanDatabase() {
-        billingErrorLogRepository.deleteAllInBatch();
+        try {
+            Files.deleteIfExists(Path.of("logs/error.log"));
+        } catch (java.io.IOException exception) {
+            throw new IllegalStateException("Failed to clean error log", exception);
+        }
         billingRunItemRepository.deleteAllInBatch();
         billingRunRepository.deleteAllInBatch();
         invoiceLineRepository.deleteAllInBatch();

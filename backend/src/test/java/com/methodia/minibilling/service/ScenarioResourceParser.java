@@ -1,7 +1,7 @@
 package com.methodia.minibilling.service;
 
-import com.methodia.minibilling.model.MeasurementPeriod;
-import com.methodia.minibilling.model.Product;
+import com.methodia.minibilling.model.reading.MeasurementPeriod;
+import com.methodia.minibilling.model.tariff.Product;
 import com.methodia.minibilling.persistence.entity.PriceEntity;
 
 import java.io.IOException;

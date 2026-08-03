@@ -1,10 +1,12 @@
 package com.methodia.minibilling.service;
 
+import com.methodia.minibilling.service.billing.ProportionalDistributionService;
+
 import com.methodia.minibilling.exception.IncompletePriceCoverageException;
 import com.methodia.minibilling.exception.MissingOverlappingPriceException;
-import com.methodia.minibilling.model.MeasurementPeriod;
-import com.methodia.minibilling.model.Product;
-import com.methodia.minibilling.model.QuantityPricePeriod;
+import com.methodia.minibilling.model.reading.MeasurementPeriod;
+import com.methodia.minibilling.model.tariff.Product;
+import com.methodia.minibilling.model.tariff.QuantityPricePeriod;
 import com.methodia.minibilling.persistence.entity.PriceEntity;
 import org.junit.jupiter.api.Test;
 

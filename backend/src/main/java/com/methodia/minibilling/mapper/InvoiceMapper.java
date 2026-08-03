@@ -2,8 +2,8 @@ package com.methodia.minibilling.mapper;
 
 import com.methodia.minibilling.controller.dto.invoice.InvoiceDetailResponse;
 import com.methodia.minibilling.controller.dto.invoice.InvoiceLineResponse;
-import com.methodia.minibilling.model.Invoice;
-import com.methodia.minibilling.model.InvoiceLine;
+import com.methodia.minibilling.model.invoice.Invoice;
+import com.methodia.minibilling.model.invoice.InvoiceLine;
 
 public final class InvoiceMapper {
 

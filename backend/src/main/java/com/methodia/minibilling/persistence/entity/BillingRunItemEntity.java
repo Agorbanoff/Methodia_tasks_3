@@ -1,7 +1,7 @@
 package com.methodia.minibilling.persistence.entity;
 
-import com.methodia.minibilling.model.BillingRunItemStatus;
-import com.methodia.minibilling.model.ErrorSeverity;
+import com.methodia.minibilling.model.billing.BillingRunItemStatus;
+import com.methodia.minibilling.model.error.ErrorSeverity;
 import com.methodia.minibilling.persistence.IdGenerator;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

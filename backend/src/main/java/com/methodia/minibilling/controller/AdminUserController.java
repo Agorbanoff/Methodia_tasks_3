@@ -2,7 +2,7 @@ package com.methodia.minibilling.controller;
 
 import com.methodia.minibilling.controller.dto.user.RegisterUserRequest;
 import com.methodia.minibilling.controller.dto.user.UserResponse;
-import com.methodia.minibilling.service.UserAdministrationService;
+import com.methodia.minibilling.service.user.UserAdministrationService;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;

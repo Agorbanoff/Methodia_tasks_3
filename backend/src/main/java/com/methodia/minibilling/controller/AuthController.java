@@ -2,9 +2,9 @@ package com.methodia.minibilling.controller;
 
 import com.methodia.minibilling.controller.dto.auth.LoginRequest;
 import com.methodia.minibilling.controller.dto.auth.LoginResponse;
-import com.methodia.minibilling.service.AuthenticationService;
-import com.methodia.minibilling.service.AuditService;
-import com.methodia.minibilling.service.JwtService;
+import com.methodia.minibilling.service.auth.AuthenticationService;
+import com.methodia.minibilling.service.audit.AuditService;
+import com.methodia.minibilling.service.auth.JwtService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;

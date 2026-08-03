@@ -1,6 +1,6 @@
 package com.methodia.minibilling.repository;
 
-import com.methodia.minibilling.model.Product;
+import com.methodia.minibilling.model.tariff.Product;
 import com.methodia.minibilling.persistence.entity.PriceEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;

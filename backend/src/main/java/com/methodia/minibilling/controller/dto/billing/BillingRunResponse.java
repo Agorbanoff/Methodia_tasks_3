@@ -1,6 +1,6 @@
 package com.methodia.minibilling.controller.dto.billing;
 
-import com.methodia.minibilling.model.BillingRunStatus;
+import com.methodia.minibilling.model.billing.BillingRunStatus;
 
 import java.time.OffsetDateTime;
 

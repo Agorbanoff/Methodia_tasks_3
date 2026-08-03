@@ -1,6 +1,6 @@
 package com.methodia.minibilling.exception;
 
-import com.methodia.minibilling.model.MeasurementPeriod;
+import com.methodia.minibilling.model.reading.MeasurementPeriod;
 
 public class MissingOverlappingPriceException extends RuntimeException {
 

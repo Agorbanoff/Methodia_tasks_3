@@ -6,7 +6,7 @@ import com.methodia.minibilling.controller.dto.importing.FileImportResult;
 import com.methodia.minibilling.controller.dto.importing.ImportValidationError;
 import com.methodia.minibilling.importer.CsvImportService;
 import com.methodia.minibilling.importer.FileImportUpload;
-import com.methodia.minibilling.service.JwtService;
+import com.methodia.minibilling.service.auth.JwtService;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;

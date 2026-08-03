@@ -4,7 +4,7 @@ import com.methodia.minibilling.controller.dto.common.PageResponse;
 import com.methodia.minibilling.controller.dto.reading.ReadingResponse;
 import com.methodia.minibilling.controller.dto.reading.SelfReportRequest;
 import com.methodia.minibilling.controller.dto.reading.SelfReportResponse;
-import com.methodia.minibilling.service.ReadingService;
+import com.methodia.minibilling.service.reading.ReadingService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;

@@ -1,7 +1,7 @@
 package com.methodia.minibilling.controller.dto.report;
 
 import com.methodia.minibilling.controller.dto.billing.BillingRunResponse;
-import com.methodia.minibilling.model.BillingRunStatus;
+import com.methodia.minibilling.model.billing.BillingRunStatus;
 
 public record BillingReportResponse(
         String runId,

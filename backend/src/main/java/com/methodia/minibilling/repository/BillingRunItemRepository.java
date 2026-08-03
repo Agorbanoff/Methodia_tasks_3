@@ -1,7 +1,7 @@
 package com.methodia.minibilling.repository;
 
-import com.methodia.minibilling.model.BillingRunItemStatus;
-import com.methodia.minibilling.model.BillingRunStatus;
+import com.methodia.minibilling.model.billing.BillingRunItemStatus;
+import com.methodia.minibilling.model.billing.BillingRunStatus;
 import com.methodia.minibilling.persistence.entity.BillingRunEntity;
 import com.methodia.minibilling.persistence.entity.BillingRunItemEntity;
 import com.methodia.minibilling.persistence.entity.CustomerEntity;

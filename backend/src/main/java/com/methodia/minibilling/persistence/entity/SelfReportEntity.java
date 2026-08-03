@@ -1,7 +1,7 @@
 package com.methodia.minibilling.persistence.entity;
 
-import com.methodia.minibilling.model.Product;
-import com.methodia.minibilling.model.SelfReportStatus;
+import com.methodia.minibilling.model.tariff.Product;
+import com.methodia.minibilling.model.reading.SelfReportStatus;
 import com.methodia.minibilling.persistence.IdGenerator;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

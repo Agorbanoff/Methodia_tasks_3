@@ -1,7 +1,7 @@
 package com.methodia.minibilling.importer;
 
-import com.methodia.minibilling.model.ImportType;
-import com.methodia.minibilling.model.Product;
+import com.methodia.minibilling.model.importing.ImportType;
+import com.methodia.minibilling.model.tariff.Product;
 import com.methodia.minibilling.persistence.entity.CustomerEntity;
 import com.methodia.minibilling.persistence.entity.UserEntity;
 import com.methodia.minibilling.repository.CustomerRepository;
@@ -56,7 +56,7 @@ class CsvImportServiceTest {
     void cleanDatabase() {
         jdbcTemplate.execute("""
                 truncate table invoice_lines, invoices, readings, prices, file_imports,
-                self_reports, billing_run_items, billing_runs, billing_error_logs, users, customers restart identity cascade
+                self_reports, billing_run_items, billing_runs, users, customers restart identity cascade
                 """);
         UserEntity admin = new UserEntity(null, "Administrator", "admin", 0, new ArrayList<>());
         admin.setUsername("admin");
@@ -204,7 +204,7 @@ class CsvImportServiceTest {
                 .singleElement()
                 .satisfies(reading -> {
                     assertThat(reading.getDateTime()).isEqualTo(OffsetDateTime.parse("2026-07-01T00:00:00+03:00"));
-                    assertThat(reading.getSource()).isEqualTo(com.methodia.minibilling.model.ReadingSource.IMPORTED);
+                    assertThat(reading.getSource()).isEqualTo(com.methodia.minibilling.model.reading.ReadingSource.IMPORTED);
                 });
     }
 

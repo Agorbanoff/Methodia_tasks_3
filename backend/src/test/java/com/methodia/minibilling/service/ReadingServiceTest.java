@@ -1,10 +1,12 @@
 package com.methodia.minibilling.service;
 
+import com.methodia.minibilling.service.reading.ReadingService;
+
 import com.methodia.minibilling.controller.dto.reading.SelfReportRequest;
 import com.methodia.minibilling.exception.SelfReportStateException;
-import com.methodia.minibilling.model.Product;
-import com.methodia.minibilling.model.ReadingSource;
-import com.methodia.minibilling.model.SelfReportStatus;
+import com.methodia.minibilling.model.tariff.Product;
+import com.methodia.minibilling.model.reading.ReadingSource;
+import com.methodia.minibilling.model.reading.SelfReportStatus;
 import com.methodia.minibilling.persistence.entity.CustomerEntity;
 import com.methodia.minibilling.persistence.entity.ReadingEntity;
 import com.methodia.minibilling.persistence.entity.UserEntity;
@@ -56,7 +58,7 @@ class ReadingServiceTest {
     void cleanDatabase() {
         jdbcTemplate.execute("""
                 truncate table invoice_lines, invoices, readings, prices, file_imports,
-                self_reports, billing_run_items, billing_runs, billing_error_logs, users, customers restart identity cascade
+                self_reports, billing_run_items, billing_runs, users, customers restart identity cascade
                 """);
     }
 

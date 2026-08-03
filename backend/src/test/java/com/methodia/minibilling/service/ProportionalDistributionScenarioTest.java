@@ -1,6 +1,8 @@
 package com.methodia.minibilling.service;
 
-import com.methodia.minibilling.model.QuantityPricePeriod;
+import com.methodia.minibilling.service.billing.ProportionalDistributionService;
+
+import com.methodia.minibilling.model.tariff.QuantityPricePeriod;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 

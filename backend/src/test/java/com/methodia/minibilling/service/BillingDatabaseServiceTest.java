@@ -1,11 +1,15 @@
 package com.methodia.minibilling.service;
 
+import com.methodia.minibilling.service.billing.BillingService;
+import com.methodia.minibilling.service.billing.InvoiceGenerationResult;
+import com.methodia.minibilling.service.invoice.InvoiceQueryService;
+
 import com.methodia.minibilling.exception.IncompletePriceCoverageException;
 import com.methodia.minibilling.exception.NoImportedDataException;
-import com.methodia.minibilling.model.Invoice;
-import com.methodia.minibilling.model.InvoiceLine;
-import com.methodia.minibilling.model.Product;
-import com.methodia.minibilling.model.ReadingSource;
+import com.methodia.minibilling.model.invoice.Invoice;
+import com.methodia.minibilling.model.invoice.InvoiceLine;
+import com.methodia.minibilling.model.tariff.Product;
+import com.methodia.minibilling.model.reading.ReadingSource;
 import com.methodia.minibilling.persistence.entity.CustomerEntity;
 import com.methodia.minibilling.persistence.entity.InvoiceEntity;
 import com.methodia.minibilling.persistence.entity.PriceEntity;

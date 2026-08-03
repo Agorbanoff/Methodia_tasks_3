@@ -1,6 +1,6 @@
 package com.methodia.minibilling.persistence.entity;
 
-import com.methodia.minibilling.model.BillingRunStatus;
+import com.methodia.minibilling.model.billing.BillingRunStatus;
 import com.methodia.minibilling.persistence.IdGenerator;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

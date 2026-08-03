@@ -1,7 +1,7 @@
 package com.methodia.minibilling.config;
 
 import com.methodia.minibilling.controller.AuthController;
-import com.methodia.minibilling.service.JwtService;
+import com.methodia.minibilling.service.auth.JwtService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.Cookie;

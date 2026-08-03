@@ -1,7 +1,7 @@
 package com.methodia.minibilling.mapper;
 
-import com.methodia.minibilling.model.Invoice;
-import com.methodia.minibilling.model.InvoiceLine;
+import com.methodia.minibilling.model.invoice.Invoice;
+import com.methodia.minibilling.model.invoice.InvoiceLine;
 import com.methodia.minibilling.persistence.entity.InvoiceEntity;
 import com.methodia.minibilling.persistence.entity.InvoiceLineEntity;
 import org.springframework.stereotype.Component;
@@ -37,7 +37,7 @@ public class InvoiceEntityMapper {
                 line.getQuantity(),
                 line.getStartDateTime().toInstant(),
                 line.getEndDateTime().toInstant(),
-                line.getProduct() == com.methodia.minibilling.model.Product.ELECT ? "elec" : "gas",
+                line.getProduct() == com.methodia.minibilling.model.tariff.Product.ELECT ? "elec" : "gas",
                 line.getPrice(),
                 line.getPriceList(),
                 line.getAmount()

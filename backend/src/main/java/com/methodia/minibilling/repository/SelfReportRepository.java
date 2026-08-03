@@ -1,7 +1,7 @@
 package com.methodia.minibilling.repository;
 
-import com.methodia.minibilling.model.Product;
-import com.methodia.minibilling.model.SelfReportStatus;
+import com.methodia.minibilling.model.tariff.Product;
+import com.methodia.minibilling.model.reading.SelfReportStatus;
 import com.methodia.minibilling.persistence.entity.CustomerEntity;
 import com.methodia.minibilling.persistence.entity.SelfReportEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
