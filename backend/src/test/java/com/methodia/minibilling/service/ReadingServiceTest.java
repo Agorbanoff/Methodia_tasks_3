@@ -257,7 +257,7 @@ class ReadingServiceTest {
     }
 
     private CustomerEntity saveCustomer(String reference, String name) {
-        return customerRepository.save(new CustomerEntity(reference, name, "T1"));
+        return customerRepository.save(new CustomerEntity(reference, name, 1));
     }
 
     private void saveUser(String username, String role, CustomerEntity customer) {

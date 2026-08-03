@@ -55,6 +55,9 @@ public class InvoiceEntity {
     @Column(name = "total_amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal totalAmount;
 
+    @Column(name = "total_amount_with_vat", nullable = false, precision = 19, scale = 2)
+    private BigDecimal totalAmountWithVat;
+
     @Column(name = "paid", nullable = false)
     private boolean paid;
 

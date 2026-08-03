@@ -5,7 +5,6 @@ import java.time.Instant;
 import java.util.List;
 
 public record InvoiceDetailResponse(
-        String id,
         String documentNumber,
         Instant documentDate,
         String consumer,
@@ -13,7 +12,9 @@ public record InvoiceDetailResponse(
         String periodStart,
         String periodEnd,
         BigDecimal totalAmount,
+        BigDecimal totalAmountWithVat,
         int linesCount,
-        List<InvoiceLineResponse> lines
+        List<InvoiceLineResponse> lines,
+        List<VatLineResponse> vat
 ) {
 }

@@ -56,8 +56,16 @@ import java.util.regex.Pattern;
 public class CsvImportService {
 
     private static final ZoneId SOFIA_ZONE = ZoneId.of("Europe/Sofia");
-    private static final Pattern TARIFF_CODE_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9_-]*");
-    private static final Pattern TARIFF_NUMBER_PATTERN = Pattern.compile("\\D*(\\d+).*");
+    private static final int DEFAULT_PRICE_LIST = 1;
+    private static final Pattern PRICE_LIST_NUMBER_PATTERN = Pattern.compile("\\D*(\\d+).*");
+    private static final PriceImportFormat LEGACY_PRICE_FORMAT =
+            new PriceImportFormat(4, true, false, false, -1, 1, 2, 3, -1);
+    private static final PriceImportFormat PRODUCT_PRICE_FORMAT =
+            new PriceImportFormat(5, false, true, true, 0, 1, 2, 3, 4);
+    private static final PriceImportFormat PRICE_LIST_PRODUCT_FORMAT =
+            new PriceImportFormat(5, true, true, false, 1, 2, 3, 4, -1);
+    private static final PriceImportFormat PRICE_LIST_PRODUCT_UNIT_FORMAT =
+            new PriceImportFormat(6, true, true, true, 1, 2, 3, 4, 5);
 
     private final UserRepository userRepository;
     private final CustomerRepository customerRepository;
@@ -121,7 +129,7 @@ public class CsvImportService {
             ParsedFile parsedFile = parse(upload);
             FileImportResult result = switch (upload.type()) {
                 case USERS -> importCustomers(upload, parsedFile, administrator);
-                case PRICES -> importTariffs(upload, parsedFile, administrator);
+                case PRICES -> importPrices(upload, parsedFile, administrator);
                 case READINGS -> importUsage(upload, parsedFile, administrator);
             };
             auditService.record(result.success() ? "FILE_IMPORT_SUCCEEDED" : "FILE_IMPORT_REJECTED",
@@ -143,22 +151,22 @@ public class CsvImportService {
         Set<String> references = new HashSet<>();
         List<CustomerRow> rows = new ArrayList<>();
         for (InputRow row : parsedFile.rows()) {
-            validateColumnCount(row, 3, errors);
+            boolean compactFormat = row.values().size() == 2;
+            validateColumnCount(row, compactFormat ? 2 : 3, errors);
             String reference = value(row, 0);
             String name = value(row, 1);
-            String tariffCode = value(row, 2);
+            String priceListValue = compactFormat ? String.valueOf(DEFAULT_PRICE_LIST) : value(row, 2);
             required(row, "reference", reference, errors);
             required(row, "name", name, errors);
-            required(row, "tariffCode", tariffCode, errors);
-            if (!tariffCode.isBlank() && !TARIFF_CODE_PATTERN.matcher(tariffCode).matches()) {
-                errors.add(new ImportValidationError(row.number(), "tariffCode",
-                        "Invalid tariff code: " + tariffCode));
-            }
+            required(row, "priceList", priceListValue, errors);
+            Integer priceList = parsePriceList(row, priceListValue, errors);
             if (!reference.isBlank() && !references.add(reference)) {
                 errors.add(new ImportValidationError(row.number(), "reference",
                         "Duplicate customer reference in file: " + reference));
             }
-            rows.add(new CustomerRow(reference, name, tariffCode));
+            if (priceList != null) {
+                rows.add(new CustomerRow(reference, name, priceList));
+            }
         }
 
         if (!errors.isEmpty()) {
@@ -168,9 +176,9 @@ public class CsvImportService {
 
         for (CustomerRow row : rows) {
             CustomerEntity customer = customerRepository.findByReference(row.reference())
-                    .orElseGet(() -> new CustomerEntity(row.reference(), row.name(), row.tariffCode()));
+                    .orElseGet(() -> new CustomerEntity(row.reference(), row.name(), row.priceList()));
             customer.setName(row.name());
-            customer.setTariffCode(row.tariffCode());
+            customer.setPriceList(row.priceList());
             customerRepository.save(customer);
         }
         saveImport(upload, administrator, "SUCCESS", rows.size(), 0);
@@ -187,11 +195,14 @@ public class CsvImportService {
         Set<String> keys = new HashSet<>();
         List<UsageRow> rows = new ArrayList<>();
         for (InputRow row : parsedFile.rows()) {
-            validateColumnCount(row, 4, errors);
+            boolean periodQuantityFormat = row.values().size() == 6;
+            validateColumnCount(row, periodQuantityFormat ? 6 : 4, errors);
             String reference = value(row, 0);
             String productValue = value(row, 1);
-            String dateTimeValue = value(row, 2);
-            String readingValue = value(row, 3);
+            String dateTimeValue = periodQuantityFormat ? value(row, 4) : value(row, 2);
+            String readingValue = periodQuantityFormat ? value(row, 2) : value(row, 3);
+            String unitValue = periodQuantityFormat ? value(row, 3) : "kWh";
+            String endValue = periodQuantityFormat ? value(row, 5) : "";
             required(row, "reference", reference, errors);
             required(row, "product", productValue, errors);
             required(row, "dateTime", dateTimeValue, errors);
@@ -206,13 +217,17 @@ public class CsvImportService {
             }
 
             Product product = parseProduct(row, productValue, errors);
-            OffsetDateTime dateTime = parseOffsetDateTime(row, dateTimeValue, errors);
+            validateUnit(row, product, unitValue, errors);
+            OffsetDateTime dateTime = periodQuantityFormat
+                    ? parseStartDateTime(row, dateTimeValue, errors)
+                    : parseOffsetDateTime(row, dateTimeValue, errors);
+            OffsetDateTime endDateTime = periodQuantityFormat ? parseEndDateTime(row, endValue, errors) : null;
             BigDecimal reading = parseDecimal(row, "meterReading", readingValue, errors);
             if (reading != null && reading.signum() < 0) {
                 errors.add(new ImportValidationError(row.number(), "meterReading", "Meter reading must not be negative"));
             }
 
-            if (customer != null && product != null && dateTime != null) {
+            if (customer != null && product != null && dateTime != null && (!periodQuantityFormat || endDateTime != null)) {
                 String key = reference + "|" + product + "|" + dateTime.toInstant();
                 if (!keys.add(key)) {
                     errors.add(new ImportValidationError(row.number(), "dateTime",
@@ -222,7 +237,7 @@ public class CsvImportService {
                     errors.add(new ImportValidationError(row.number(), "dateTime",
                             "Reading already exists for customer, product and timestamp"));
                 }
-                rows.add(new UsageRow(customer, product, dateTime, reading));
+                rows.add(new UsageRow(customer, product, dateTime, reading, periodQuantityFormat, endDateTime));
             }
         }
 
@@ -233,13 +248,20 @@ public class CsvImportService {
 
         FileImportEntity fileImport = saveImport(upload, administrator, "SUCCESS", rows.size(), 0);
         for (UsageRow row : rows) {
-            readingRepository.save(new ReadingEntity(null, row.customer(), row.product(), row.dateTime(),
-                    row.meterReading(), false, false, ReadingSource.IMPORTED, fileImport));
+            if (row.periodQuantityFormat()) {
+                readingRepository.save(new ReadingEntity(null, row.customer(), row.product(), row.dateTime(),
+                        BigDecimal.ZERO, false, false, ReadingSource.IMPORTED, fileImport));
+                readingRepository.save(new ReadingEntity(null, row.customer(), row.product(), row.endDateTime(),
+                        row.meterReading(), false, false, ReadingSource.IMPORTED, fileImport));
+            } else {
+                readingRepository.save(new ReadingEntity(null, row.customer(), row.product(), row.dateTime(),
+                        row.meterReading(), false, false, ReadingSource.IMPORTED, fileImport));
+            }
         }
         return result(upload, true, rows.size(), List.of());
     }
 
-    private FileImportResult importTariffs(TypedUpload upload, ParsedFile parsedFile, UserEntity administrator) {
+    private FileImportResult importPrices(TypedUpload upload, ParsedFile parsedFile, UserEntity administrator) {
         List<ImportValidationError> errors = new ArrayList<>(parsedFile.errors());
         if (!isExpectedFileName(upload.fileName(), "tariff_plans")) {
             errors.add(new ImportValidationError(null, "fileName",
@@ -247,26 +269,29 @@ public class CsvImportService {
         }
 
         Set<String> exactRows = new HashSet<>();
-        Map<String, List<TariffRow>> rowsByCode = new HashMap<>();
-        List<TariffRow> rows = new ArrayList<>();
+        Map<String, List<PriceRow>> rowsByPriceList = new HashMap<>();
+        List<PriceRow> rows = new ArrayList<>();
         for (InputRow row : parsedFile.rows()) {
-            validateColumnCount(row, 4, errors);
-            String tariffCode = value(row, 0);
-            String startValue = value(row, 1);
-            String endValue = value(row, 2);
-            String priceValue = value(row, 3);
-            required(row, "tariffCode", tariffCode, errors);
+            PriceImportFormat format = priceImportFormat(row);
+            validateColumnCount(row, format.columnCount(), errors);
+            String priceListValue = format.hasPriceList() ? value(row, 0) : String.valueOf(DEFAULT_PRICE_LIST);
+            Product product = format.hasProduct() ? parseProduct(row, value(row, format.productIndex()), errors) : null;
+            String startValue = value(row, format.startIndex());
+            String endValue = value(row, format.endIndex());
+            String priceValue = value(row, format.priceIndex());
+            String unitValue = format.hasUnit() ? value(row, format.unitIndex()) : defaultUnit(product);
+            required(row, "priceList", priceListValue, errors);
             required(row, "validFrom", startValue, errors);
             required(row, "validTo", endValue, errors);
             required(row, "unitPrice", priceValue, errors);
-            if (!tariffCode.isBlank() && !TARIFF_CODE_PATTERN.matcher(tariffCode).matches()) {
-                errors.add(new ImportValidationError(row.number(), "tariffCode",
-                        "Invalid tariff code: " + tariffCode));
-            }
+            Integer priceList = parsePriceList(row, priceListValue, errors);
 
             LocalDate start = parseLocalDate(row, "validFrom", startValue, errors);
             LocalDate end = parseLocalDate(row, "validTo", endValue, errors);
             BigDecimal price = parseDecimal(row, "unitPrice", priceValue, errors);
+            if (format.hasProduct()) {
+                validateUnit(row, product, unitValue, errors);
+            }
             if (start != null && end != null && start.isAfter(end)) {
                 errors.add(new ImportValidationError(row.number(), "validFrom",
                         "Valid from must not be after valid to"));
@@ -274,19 +299,20 @@ public class CsvImportService {
             if (price != null && price.signum() <= 0) {
                 errors.add(new ImportValidationError(row.number(), "unitPrice", "Unit price must be greater than zero"));
             }
-            if (start != null && end != null && price != null) {
-                String exactKey = tariffCode + "|" + start + "|" + end + "|" + price.stripTrailingZeros();
+            if (start != null && end != null && price != null && priceList != null) {
+                String productKey = format.hasProduct() ? product.name() : "LEGACY";
+                String exactKey = priceList + "|" + productKey + "|" + start + "|" + end + "|" + price.stripTrailingZeros();
                 if (!exactRows.add(exactKey)) {
-                    errors.add(new ImportValidationError(row.number(), "tariffCode", "Duplicate tariff row"));
+                    errors.add(new ImportValidationError(row.number(), "priceList", "Duplicate tariff row"));
                 }
-                TariffRow tariffRow = new TariffRow(row.number(), tariffCode, start, end, price);
-                rows.add(tariffRow);
-                rowsByCode.computeIfAbsent(tariffCode, ignored -> new ArrayList<>()).add(tariffRow);
+                PriceRow priceRow = new PriceRow(row.number(), priceList, product, start, end, price);
+                rows.add(priceRow);
+                rowsByPriceList.computeIfAbsent(priceList + "|" + productKey, ignored -> new ArrayList<>()).add(priceRow);
             }
         }
 
-        validateTariffOverlaps(rowsByCode, errors);
-        validateExistingTariffs(rows, errors);
+        validatePriceOverlaps(rowsByPriceList, errors);
+        validateExistingPrices(rows, errors);
 
         if (!errors.isEmpty()) {
             saveImport(upload, administrator, "REJECTED", 0, errors.size());
@@ -294,12 +320,11 @@ public class CsvImportService {
         }
 
         FileImportEntity fileImport = saveImport(upload, administrator, "SUCCESS", rows.size(), 0);
-        for (TariffRow row : rows) {
-            int priceList = legacyPriceList(row.tariffCode());
-            for (Product product : List.of(Product.GAS, Product.ELECT)) {
+        for (PriceRow row : rows) {
+            List<Product> products = row.product() == null ? List.of(Product.GAS, Product.ELECT) : List.of(row.product());
+            for (Product product : products) {
                 PriceEntity price = new PriceEntity(null, product, row.startDate(), row.endDate(),
-                        row.unitPrice(), priceList, fileImport);
-                price.setTariffCode(row.tariffCode());
+                        row.unitPrice(), row.priceList(), fileImport);
                 priceRepository.save(price);
             }
         }
@@ -378,30 +403,31 @@ public class CsvImportService {
         }
     }
 
-    private void validateExistingTariffs(List<TariffRow> rows, List<ImportValidationError> errors) {
-        for (TariffRow row : rows) {
-            List<PriceEntity> existing = priceRepository.findByTariffCodeAndProductOrderByStartDateAsc(row.tariffCode(), Product.GAS);
+    private void validateExistingPrices(List<PriceRow> rows, List<ImportValidationError> errors) {
+        for (PriceRow row : rows) {
+            Product product = row.product() == null ? Product.GAS : row.product();
+            List<PriceEntity> existing = priceRepository.findByPriceListAndProductOrderByStartDateAsc(row.priceList(), product);
             for (PriceEntity price : existing) {
                 if (!price.getStartDate().isAfter(row.endDate()) && !price.getEndDate().isBefore(row.startDate())) {
                     errors.add(new ImportValidationError(row.rowNumber(), "validFrom",
-                            "Overlapping tariff period for code: " + row.tariffCode()));
+                            "Overlapping tariff period for priceList: " + row.priceList()));
                     break;
                 }
             }
         }
     }
 
-    private void validateTariffOverlaps(Map<String, List<TariffRow>> rowsByCode, List<ImportValidationError> errors) {
-        for (List<TariffRow> group : rowsByCode.values()) {
-            List<TariffRow> sorted = group.stream()
-                    .sorted(Comparator.comparing(TariffRow::startDate))
+    private void validatePriceOverlaps(Map<String, List<PriceRow>> rowsByPriceList, List<ImportValidationError> errors) {
+        for (List<PriceRow> group : rowsByPriceList.values()) {
+            List<PriceRow> sorted = group.stream()
+                    .sorted(Comparator.comparing(PriceRow::startDate))
                     .toList();
             for (int index = 1; index < sorted.size(); index++) {
-                TariffRow previous = sorted.get(index - 1);
-                TariffRow current = sorted.get(index);
+                PriceRow previous = sorted.get(index - 1);
+                PriceRow current = sorted.get(index);
                 if (!current.startDate().isAfter(previous.endDate())) {
                     errors.add(new ImportValidationError(current.rowNumber(), "validFrom",
-                            "Overlapping tariff period for code: " + current.tariffCode()));
+                            "Overlapping tariff period for priceList: " + current.priceList()));
                 }
             }
         }
@@ -425,12 +451,53 @@ public class CsvImportService {
     }
 
     private boolean isHeader(ImportType type, InputRow row) {
-        List<String> values = row.values().stream().map(value -> value.trim().toLowerCase(Locale.ROOT)).toList();
+        List<String> values = row.values().stream()
+                .map(value -> cleanCell(value).toLowerCase(Locale.ROOT))
+                .toList();
         return switch (type) {
-            case USERS -> values.equals(List.of("customer reference", "customer name", "tariff code"));
-            case READINGS -> values.equals(List.of("customer reference", "product", "reading date-time", "meter reading"));
-            case PRICES -> values.equals(List.of("tariff code", "valid from", "valid to", "unit price"));
+            case USERS -> values.equals(List.of("customer reference", "customer name", "tariff code"))
+                    || values.equals(List.of("customer id", "customer name", "tariff code"))
+                    || values.equals(List.of("customer_id", "customer_name"))
+                    || values.equals(List.of("customer_id", "customer_name", "price_list"))
+                    || values.equals(List.of("customer id", "customer name", "price list"));
+            case READINGS -> values.equals(List.of("customer reference", "product", "reading date-time", "meter reading"))
+                    || values.equals(List.of("customer id", "product", "billing period", "consumption"))
+                    || values.equals(List.of("customer_id", "product", "quantity", "unit", "start_date", "end_date"));
+            case PRICES -> values.equals(List.of("tariff code", "valid from", "valid to", "unit price"))
+                    || values.equals(List.of("tariff code", "product", "valid from", "valid to", "price"))
+                    || values.equals(List.of("product", "start_date", "end_date", "price", "price_unit"))
+                    || values.equals(List.of("price_list", "product", "start_date", "end_date", "price", "price_unit"))
+                    || values.equals(List.of("price list", "product", "start date", "end date", "price", "price unit"));
         };
+    }
+
+    private PriceImportFormat priceImportFormat(InputRow row) {
+        int columns = row.values().size();
+        if (columns == 6) {
+            return PRICE_LIST_PRODUCT_UNIT_FORMAT;
+        }
+        if (columns == 5 && !isProductToken(value(row, 0))) {
+            return PRICE_LIST_PRODUCT_FORMAT;
+        }
+        if (columns == 5) {
+            return PRODUCT_PRICE_FORMAT;
+        }
+        return LEGACY_PRICE_FORMAT;
+    }
+
+    private boolean isProductToken(String value) {
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return normalized.equals("gas")
+                || normalized.equals("elec")
+                || normalized.equals("electricity")
+                || normalized.equals("elect")
+                || normalized.equals("standing charge")
+                || normalized.equals("standing_charge")
+                || normalized.equals("ccl");
+    }
+
+    private String defaultUnit(Product product) {
+        return product == Product.STANDING_CHARGE ? "day" : "kWh";
     }
 
     private void validateColumnCount(InputRow row, int expected, List<ImportValidationError> errors) {
@@ -441,7 +508,14 @@ public class CsvImportService {
     }
 
     private String value(InputRow row, int index) {
-        return index < row.values().size() ? row.values().get(index).trim() : "";
+        return index < row.values().size() ? cleanCell(row.values().get(index)) : "";
+    }
+
+    private String cleanCell(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\uFEFF", "").trim();
     }
 
     private void required(InputRow row, String field, String value, List<ImportValidationError> errors) {
@@ -453,7 +527,9 @@ public class CsvImportService {
     private Product parseProduct(InputRow row, String value, List<ImportValidationError> errors) {
         return switch (value.trim().toLowerCase(Locale.ROOT)) {
             case "gas" -> Product.GAS;
-            case "elec" -> Product.ELECT;
+            case "elec", "electricity", "elect" -> Product.ELECT;
+            case "standing charge", "standing_charge" -> Product.STANDING_CHARGE;
+            case "ccl" -> Product.CCL;
             default -> {
                 if (!value.isBlank()) {
                     errors.add(new ImportValidationError(row.number(), "product",
@@ -462,6 +538,31 @@ public class CsvImportService {
                 yield null;
             }
         };
+    }
+
+    private void validateUnit(InputRow row, Product product, String unit, List<ImportValidationError> errors) {
+        if (product == null || unit == null || unit.isBlank()) {
+            return;
+        }
+        String normalized = unit.trim().toLowerCase(Locale.ROOT);
+        boolean energy = normalized.equals("kwh") || normalized.equals("kw/h");
+        boolean day = normalized.equals("day") || normalized.equals("days");
+        if (product == Product.STANDING_CHARGE && !day) {
+            errors.add(new ImportValidationError(row.number(), "price_unit", "Standing Charge requires day unit"));
+        }
+        if ((product == Product.GAS || product == Product.ELECT || product == Product.CCL) && !energy) {
+            errors.add(new ImportValidationError(row.number(), "price_unit", product + " requires energy unit"));
+        }
+    }
+
+    private OffsetDateTime parseEndDateTime(InputRow row, String value, List<ImportValidationError> errors) {
+        LocalDate date = parseLocalDate(row, "endDate", value, errors);
+        return date == null ? null : date.atTime(23, 59, 59).atZone(SOFIA_ZONE).toOffsetDateTime();
+    }
+
+    private OffsetDateTime parseStartDateTime(InputRow row, String value, List<ImportValidationError> errors) {
+        LocalDate date = parseLocalDate(row, "startDate", value, errors);
+        return date == null ? null : date.atStartOfDay(SOFIA_ZONE).toOffsetDateTime();
     }
 
     private OffsetDateTime parseOffsetDateTime(InputRow row, String value, List<ImportValidationError> errors) {
@@ -500,12 +601,16 @@ public class CsvImportService {
         }
     }
 
-    private int legacyPriceList(String tariffCode) {
-        Matcher matcher = TARIFF_NUMBER_PATTERN.matcher(tariffCode);
+    private Integer parsePriceList(InputRow row, String value, List<ImportValidationError> errors) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        Matcher matcher = PRICE_LIST_NUMBER_PATTERN.matcher(value);
         if (matcher.matches()) {
             return Integer.parseInt(matcher.group(1));
         }
-        return Math.abs(tariffCode.hashCode());
+        errors.add(new ImportValidationError(row.number(), "priceList", "priceList must be numeric"));
+        return null;
     }
 
     private List<String> values(CSVRecord record) {
@@ -579,12 +684,26 @@ public class CsvImportService {
     private record InputRow(int number, List<String> values) {
     }
 
-    private record CustomerRow(String reference, String name, String tariffCode) {
+    private record CustomerRow(String reference, String name, int priceList) {
     }
 
-    private record UsageRow(CustomerEntity customer, Product product, OffsetDateTime dateTime, BigDecimal meterReading) {
+    private record UsageRow(CustomerEntity customer, Product product, OffsetDateTime dateTime, BigDecimal meterReading,
+                            boolean periodQuantityFormat, OffsetDateTime endDateTime) {
     }
 
-    private record TariffRow(int rowNumber, String tariffCode, LocalDate startDate, LocalDate endDate, BigDecimal unitPrice) {
+    private record PriceRow(int rowNumber, int priceList, Product product, LocalDate startDate, LocalDate endDate, BigDecimal unitPrice) {
+    }
+
+    private record PriceImportFormat(
+            int columnCount,
+            boolean hasPriceList,
+            boolean hasProduct,
+            boolean hasUnit,
+            int productIndex,
+            int startIndex,
+            int endIndex,
+            int priceIndex,
+            int unitIndex
+    ) {
     }
 }

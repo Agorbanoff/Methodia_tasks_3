@@ -299,7 +299,9 @@ class BillingRunLifecycleTest {
                 tariffSnapshotService.readSnapshot(snapshot)
         );
 
-        assertThat(invoiceLineRepository.findAll()).singleElement()
+        assertThat(invoiceLineRepository.findAll().stream()
+                .filter(line -> line.getProduct() == Product.GAS)
+                .toList()).singleElement()
                 .satisfies(line -> assertThat(line.getPrice()).isEqualByComparingTo("1.00"));
     }
 
@@ -341,7 +343,7 @@ class BillingRunLifecycleTest {
     }
 
     private CustomerEntity saveCustomer(String name, String reference, int priceList) {
-        return customerRepository.save(new CustomerEntity(reference, name, "T" + priceList));
+        return customerRepository.save(new CustomerEntity(reference, name, priceList));
     }
 
     private void saveMonthlyReadings(CustomerEntity customer, String firstReading, String lastReading) {
@@ -363,7 +365,20 @@ class BillingRunLifecycleTest {
     }
 
     private PriceEntity savePrice(Product product, String startDate, String endDate, String price, int priceList) {
-        return priceRepository.save(new PriceEntity(null, product, LocalDate.parse(startDate), LocalDate.parse(endDate),
+        PriceEntity saved = priceRepository.save(new PriceEntity(null, product, LocalDate.parse(startDate), LocalDate.parse(endDate),
                 new BigDecimal(price), priceList, null));
+        if (product == Product.GAS || product == Product.ELECT) {
+            ensureChargePrice(Product.STANDING_CHARGE, startDate, endDate, "1.00", priceList);
+            ensureChargePrice(Product.CCL, startDate, endDate, "0.01", priceList);
+        }
+        return saved;
+    }
+
+    private void ensureChargePrice(Product product, String startDate, String endDate, String price, int priceList) {
+        if (!priceRepository.existsByPriceListAndProductAndStartDateAndEndDate(
+                priceList, product, LocalDate.parse(startDate), LocalDate.parse(endDate))) {
+            priceRepository.save(new PriceEntity(null, product, LocalDate.parse(startDate), LocalDate.parse(endDate),
+                    new BigDecimal(price), priceList, null));
+        }
     }
 }

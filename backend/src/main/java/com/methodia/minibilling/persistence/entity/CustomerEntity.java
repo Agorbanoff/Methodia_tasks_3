@@ -33,8 +33,8 @@ public class CustomerEntity {
     @Column(name = "name", nullable = false)
     private String name;
 
-    @Column(name = "tariff_code", length = 50, nullable = false)
-    private String tariffCode;
+    @Column(name = "price_list", nullable = false)
+    private int priceList;
 
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
@@ -42,10 +42,10 @@ public class CustomerEntity {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
-    public CustomerEntity(String reference, String name, String tariffCode) {
+    public CustomerEntity(String reference, String name, int priceList) {
         this.reference = reference;
         this.name = name;
-        this.tariffCode = tariffCode;
+        this.priceList = priceList;
     }
 
     @PrePersist

@@ -42,7 +42,7 @@ public class UserAdministrationService {
         if (request.role() == UserRole.USER) {
             CustomerEntity customer = customerRepository.findByReference(request.reference())
                     .orElseGet(() -> customerRepository.save(new CustomerEntity(
-                            request.reference(), request.name(), "T" + request.priceListNumber())));
+                            request.reference(), request.name(), request.priceListNumber())));
             if (userRepository.existsByCustomer(customer)) {
                 throw new IllegalArgumentException("Customer already has a user account");
             }

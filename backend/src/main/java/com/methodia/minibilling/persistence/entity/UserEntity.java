@@ -39,9 +39,6 @@ public class UserEntity {
     @Column(name = "price_list", nullable = false)
     private int priceList;
 
-    @Column(name = "tariff_code", length = 50)
-    private String tariffCode;
-
     @Column(name = "username", length = 100, unique = true)
     private String username;
 
@@ -66,7 +63,6 @@ public class UserEntity {
         this.name = name;
         this.reference = reference;
         this.priceList = priceList;
-        this.tariffCode = "T" + priceList;
         this.username = reference;
         this.role = "USER";
     }
@@ -93,9 +89,6 @@ public class UserEntity {
         }
         if (role == null || role.isBlank()) {
             role = "USER";
-        }
-        if (tariffCode == null || tariffCode.isBlank()) {
-            tariffCode = "T" + priceList;
         }
         if (createdAt == null) {
             createdAt = OffsetDateTime.now();

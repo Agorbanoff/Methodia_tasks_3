@@ -24,7 +24,7 @@ public class TariffSnapshotService {
     public String createSnapshot(CustomerEntity customer) {
         List<PriceEntity> prices = new ArrayList<>();
         for (Product product : Product.values()) {
-            prices.addAll(priceRepository.findByTariffCodeAndProductOrderByStartDateAsc(customer.getTariffCode(), product));
+            prices.addAll(priceRepository.findByPriceListAndProductOrderByStartDateAsc(customer.getPriceList(), product));
         }
         prices.sort(Comparator.comparing(PriceEntity::getProduct).thenComparing(PriceEntity::getStartDate));
 
@@ -39,8 +39,6 @@ public class TariffSnapshotService {
                     .append(price.getPrice())
                     .append('|')
                     .append(price.getPriceList())
-                    .append('|')
-                    .append(price.getTariffCode() == null ? "" : price.getTariffCode())
                     .append('\n');
         }
         return snapshot.toString();
@@ -58,7 +56,7 @@ public class TariffSnapshotService {
                 continue;
             }
             String[] fields = line.split("\\|", -1);
-            if (fields.length < 6) {
+            if (fields.length < 5) {
                 throw new IllegalArgumentException("Invalid tariff snapshot row");
             }
 
@@ -71,7 +69,6 @@ public class TariffSnapshotService {
                     Integer.parseInt(fields[4]),
                     null
             );
-            price.setTariffCode(fields[5].isBlank() ? null : fields[5]);
             prices.add(price);
         }
         return prices;

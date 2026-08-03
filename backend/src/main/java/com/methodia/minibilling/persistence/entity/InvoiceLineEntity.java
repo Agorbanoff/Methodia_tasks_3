@@ -31,6 +31,10 @@ public class InvoiceLineEntity {
     @JoinColumn(name = "invoice_id", nullable = false)
     private InvoiceEntity invoice;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_line_id")
+    private InvoiceLineEntity sourceLine;
+
     @Column(name = "quantity", nullable = false, precision = 19, scale = 2)
     private BigDecimal quantity;
 

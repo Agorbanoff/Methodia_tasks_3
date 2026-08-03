@@ -13,7 +13,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -23,7 +22,6 @@ import java.time.LocalDate;
 
 @Getter
 @Setter
-@AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Entity
 @Table(name = "prices")
@@ -49,9 +47,6 @@ public class PriceEntity {
     @Column(name = "price_list", nullable = false)
     private int priceList;
 
-    @Column(name = "tariff_code", length = 50)
-    private String tariffCode;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "file_import_id")
     private FileImportEntity fileImport;
@@ -64,7 +59,6 @@ public class PriceEntity {
         this.endDate = endDate;
         this.price = price;
         this.priceList = priceList;
-        this.tariffCode = "T" + priceList;
         this.fileImport = fileImport;
     }
 

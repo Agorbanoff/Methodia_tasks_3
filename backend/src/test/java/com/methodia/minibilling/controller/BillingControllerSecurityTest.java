@@ -2,8 +2,8 @@ package com.methodia.minibilling.controller;
 
 import com.methodia.minibilling.config.CorsConfig;
 import com.methodia.minibilling.config.SecurityConfig;
+import com.methodia.minibilling.controller.dto.invoice.ConsumptionInvoiceLineResponse;
 import com.methodia.minibilling.controller.dto.invoice.InvoiceDetailResponse;
-import com.methodia.minibilling.controller.dto.invoice.InvoiceLineResponse;
 import com.methodia.minibilling.service.billing.BillingRunService;
 import com.methodia.minibilling.service.billing.BillingService;
 import com.methodia.minibilling.service.invoice.InvoiceQueryService;
@@ -97,7 +97,6 @@ class BillingControllerSecurityTest {
     void invoiceListUsesFrontendContractAndReferenceFilter() throws Exception {
         mockJwt("admin-token", "admin", "ADMIN");
         InvoiceDetailResponse invoice = new InvoiceDetailResponse(
-                "invoice-id",
                 "1000",
                 Instant.parse("2026-07-31T21:00:00Z"),
                 "Acme Gas Household",
@@ -105,17 +104,22 @@ class BillingControllerSecurityTest {
                 "2026-07-01",
                 "2026-07-31",
                 new BigDecimal("144.38"),
+                new BigDecimal("173.26"),
                 1,
-                List.of(new InvoiceLineResponse(
+                List.of(new ConsumptionInvoiceLineResponse(
                         1,
-                        "gas",
                         new BigDecimal("137.50"),
-                        new BigDecimal("1.05"),
-                        new BigDecimal("144.38"),
                         Instant.parse("2026-07-01T00:00:00Z"),
                         Instant.parse("2026-07-15T23:59:59Z"),
-                        "T1"
-                ))
+                        "gas",
+                        "kW/h",
+                        new BigDecimal("1.05"),
+                        1,
+                        new BigDecimal("144.38"),
+                        Instant.parse("2026-07-01T00:00:00Z"),
+                        Instant.parse("2026-07-15T23:59:59Z")
+                )),
+                List.of()
         );
         when(invoiceQueryService.findVisibleInvoices(eq(Optional.of("DUMMY-1001")), org.mockito.ArgumentMatchers.any(), eq("admin")))
                 .thenReturn(new PageImpl<>(List.of(invoice), PageRequest.of(0, 20), 1));
@@ -132,7 +136,7 @@ class BillingControllerSecurityTest {
                 .andExpect(jsonPath("$.content[0].lines[0].price").value(1.05))
                 .andExpect(jsonPath("$.content[0].lines[0].lineStart").exists())
                 .andExpect(jsonPath("$.content[0].lines[0].lineEnd").exists())
-                .andExpect(jsonPath("$.content[0].lines[0].priceList").value("T1"))
+                .andExpect(jsonPath("$.content[0].lines[0].priceList").value(1))
                 .andExpect(jsonPath("$.content[0].lines[0].service").doesNotExist())
                 .andExpect(jsonPath("$.content[0].lines[0].unitPrice").doesNotExist());
     }

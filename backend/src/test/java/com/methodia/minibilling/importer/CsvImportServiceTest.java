@@ -79,7 +79,7 @@ class CsvImportServiceTest {
         assertThat(response.results().getFirst().importedRecords()).isEqualTo(2);
         assertThat(customerRepository.findByReference("DUMMY-1001")).hasValueSatisfying(customer -> {
             assertThat(customer.getName()).isEqualTo("Acme Gas Household");
-            assertThat(customer.getTariffCode()).isEqualTo("T1");
+            assertThat(customer.getPriceList()).isEqualTo(1);
         });
         assertThat(userRepository.findByReference("DUMMY-1001")).isEmpty();
     }
@@ -98,7 +98,7 @@ class CsvImportServiceTest {
         assertThat(response.results().getFirst().importedRecords()).isEqualTo(2);
         assertThat(customerRepository.findByReference("DUMMY-1001")).hasValueSatisfying(customer -> {
             assertThat(customer.getName()).isEqualTo("Acme Gas Household");
-            assertThat(customer.getTariffCode()).isEqualTo("T1");
+            assertThat(customer.getPriceList()).isEqualTo(1);
         });
         assertThat(userRepository.findByReference("DUMMY-1001")).isEmpty();
     }
@@ -124,8 +124,6 @@ class CsvImportServiceTest {
 
         assertThat(response.results().getFirst().success()).isFalse();
         assertThat(response.results().getFirst().errors()).anySatisfy(error ->
-                assertThat(error.field()).isEqualTo("columns"));
-        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
                 assertThat(error.field()).isEqualTo("reference"));
     }
 
@@ -138,8 +136,58 @@ class CsvImportServiceTest {
                 """)), "admin");
 
         assertThat(response.results().getFirst().success()).isTrue();
-        assertThat(priceRepository.findByTariffCodeAndProductOrderByStartDateAsc("T1", Product.GAS)).hasSize(2);
-        assertThat(priceRepository.findByTariffCodeAndProductOrderByStartDateAsc("T1", Product.ELECT)).hasSize(2);
+        assertThat(priceRepository.findByPriceListAndProductOrderByStartDateAsc(1, Product.GAS)).hasSize(2);
+        assertThat(priceRepository.findByPriceListAndProductOrderByStartDateAsc(1, Product.ELECT)).hasSize(2);
+    }
+
+    @Test
+    void importsFinalTaskCsvShapesWithStandingChargeAndCcl() {
+        var response = csvImportService.importFiles(List.of(
+                upload(ImportType.USERS, "customer_data.csv",
+                        """
+                        customer_id,customer_name
+                        1002,Maria Petrova Petrova
+                        """),
+                upload(ImportType.PRICES, "tariff_plans.csv",
+                        """
+                        product,start_date,end_date,price,price_unit
+                        Gas,2025-01-01,2025-01-31,1.80,kWh
+                        Gas,2025-02-01,2025-12-31,2.00,kWh
+                        Standing Charge,2025-01-01,2025-01-31,1.60,day
+                        Standing Charge,2025-02-01,2025-12-31,1.80,day
+                        CCL,2025-01-01,2025-01-31,0.02,kWh
+                        CCL,2025-02-01,2025-12-31,0.03,kWh
+                        """),
+                upload(ImportType.READINGS, "usage_data.csv",
+                        """
+                        customer_id,product,quantity,unit,start_date,end_date
+                        1002,Gas,436,kWh,2025-01-01,2025-03-11
+                        """)
+        ), "admin");
+
+        assertThat(response.results()).allSatisfy(result ->
+                assertThat(result.success()).withFailMessage(result.errors().toString()).isTrue());
+        CustomerEntity customer = customerRepository.findByReference("1002").orElseThrow();
+        assertThat(customer.getPriceList()).isEqualTo(1);
+        assertThat(readingRepository.findByCustomerAndProductOrderByDateTimeAsc(customer, Product.GAS)).hasSize(2);
+        assertThat(priceRepository.findByPriceListAndProductOrderByStartDateAsc(1, Product.STANDING_CHARGE)).hasSize(2);
+        assertThat(priceRepository.findByPriceListAndProductOrderByStartDateAsc(1, Product.CCL)).hasSize(2);
+    }
+
+    @Test
+    void tariffImportRejectsInvalidStandingChargeAndCclUnits() {
+        var response = csvImportService.importFiles(List.of(upload(ImportType.PRICES, "tariff_plans.csv",
+                """
+                product,start_date,end_date,price,price_unit
+                Standing Charge,2025-01-01,2025-01-31,1.60,kWh
+                CCL,2025-01-01,2025-01-31,0.02,day
+                """)), "admin");
+
+        assertThat(response.results().getFirst().success()).isFalse();
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("Standing Charge requires day unit"));
+        assertThat(response.results().getFirst().errors()).anySatisfy(error ->
+                assertThat(error.message()).contains("CCL requires energy unit"));
     }
 
     @Test
@@ -151,8 +199,8 @@ class CsvImportServiceTest {
         )), "admin");
 
         assertThat(response.results().getFirst().success()).isTrue();
-        assertThat(priceRepository.findByTariffCodeAndProductOrderByStartDateAsc("T1", Product.GAS)).hasSize(2);
-        assertThat(priceRepository.findByTariffCodeAndProductOrderByStartDateAsc("T1", Product.ELECT)).hasSize(2);
+        assertThat(priceRepository.findByPriceListAndProductOrderByStartDateAsc(1, Product.GAS)).hasSize(2);
+        assertThat(priceRepository.findByPriceListAndProductOrderByStartDateAsc(1, Product.ELECT)).hasSize(2);
     }
 
     @Test
@@ -170,7 +218,7 @@ class CsvImportServiceTest {
                 assertThat(error.message()).contains("Unit price must be greater than zero"));
         assertThat(response.results().getFirst().errors()).anySatisfy(error ->
                 assertThat(error.message()).contains("Invalid ISO date"));
-        assertThat(priceRepository.findByTariffCodeAndProductOrderByStartDateAsc("T1", Product.GAS)).isEmpty();
+        assertThat(priceRepository.findByPriceListAndProductOrderByStartDateAsc(1, Product.GAS)).isEmpty();
     }
 
     @Test
@@ -288,8 +336,12 @@ class CsvImportServiceTest {
         assertThat(readingRepository.count()).isEqualTo(1);
     }
 
-    private CustomerEntity saveCustomer(String reference, String tariffCode) {
-        return customerRepository.save(new CustomerEntity(reference, "Customer", tariffCode));
+    private CustomerEntity saveCustomer(String reference, String priceListValue) {
+        return customerRepository.save(new CustomerEntity(reference, "Customer", priceList(priceListValue)));
+    }
+
+    private int priceList(String value) {
+        return Integer.parseInt(value.replaceAll("\\D+", ""));
     }
 
     private FileImportUpload upload(ImportType type, String fileName, String content) {
